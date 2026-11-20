@@ -15,7 +15,8 @@ import { MailKind, renderReportEmail } from '../_shared/reportEmail.ts';
 
 const SENDER = Deno.env.get('REPORT_SENDER') ?? 'auth@qbox-logistic.org';
 const SENDER_NAME = 'UAV Maintenance · UNFPA Madagascar';
-const BREVO_KEY = Deno.env.get('BREVO_API_KEY') ?? '';
+// espaces, retours à la ligne ou guillemets autour de la valeur saisie : ignorés
+const BREVO_KEY = (Deno.env.get('BREVO_API_KEY') ?? '').trim().replace(/^["']|["']$/g, '').trim();
 const DRY_RUN = !BREVO_KEY || Deno.env.get('MAIL_DRY_RUN') === '1';
 
 const CORS = {
@@ -41,6 +42,9 @@ const unwrap = <T>(r: { data: T | null; error: { message: string } | null }): T 
 
 async function brevoSend(to: Recipient[], subject: string, html: string, text: string, csv: { name: string; content: string }) {
   if (DRY_RUN) return { status: 'simule' as const, messageId: null };
+  if (BREVO_KEY.startsWith('xsmtpsib-')) {
+    throw new Error('BREVO_API_KEY contient une clé SMTP (xsmtpsib-…) : il faut une clé API Brevo (xkeysib-…), menu « SMTP & API » → onglet « API Keys »');
+  }
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': BREVO_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -52,6 +56,9 @@ async function brevoSend(to: Recipient[], subject: string, html: string, text: s
     }),
   });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    throw new Error(`Brevo refuse la clé API (${body?.message ?? 'non autorisée'}) : vérifiez BREVO_API_KEY (clé API xkeysib-…, active dans Brevo)`);
+  }
   if (!res.ok) throw new Error(`Brevo ${res.status} : ${body?.message ?? res.statusText}`);
   return { status: 'envoye' as const, messageId: (body?.messageId as string) ?? null };
 }
