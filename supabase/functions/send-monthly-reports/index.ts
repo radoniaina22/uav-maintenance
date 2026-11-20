@@ -9,7 +9,7 @@
 //
 // Secrets : BREVO_API_KEY (obligatoire pour un envoi réel), REPORT_SENDER (facultatif, défaut ci-dessous).
 // Sans BREVO_API_KEY, ou avec MAIL_DRY_RUN=1, rien n'est envoyé : statut « simule » dans le journal.
-// SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY sont fournis par Supabase.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY sont fournis par Supabase (la clé anon n'est pas utilisée).
 import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { MailKind, renderReportEmail } from '../_shared/reportEmail.ts';
 
@@ -142,8 +142,20 @@ class Dispatcher {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Méthode non autorisée' }, 405);
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const db = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+  try {
+    return await handle(req);
+  } catch (e) {
+    // toute erreur imprévue est renvoyée en JSON (sinon l'application n'affiche qu'un message générique)
+    console.error('send-monthly-reports', e);
+    return json({ error: `Erreur de la fonction d'envoi : ${e instanceof Error ? e.message : String(e)}` }, 500);
+  }
+});
+
+async function handle(req: Request): Promise<Response> {
+  const url = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !serviceKey) return json({ error: 'Configuration de la fonction incomplète (SUPABASE_URL / clé de service)' }, 500);
+  const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
   let body: { mode?: string; month?: string; kind?: MailKind; port?: string | null; test?: boolean; force?: boolean };
   try { body = await req.json(); } catch { return json({ error: 'Corps JSON invalide' }, 400); }
@@ -156,10 +168,11 @@ Deno.serve(async (req) => {
     if (!fromCron) return json({ error: 'Secret invalide' }, 401);
   } else {
     const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-    const { data: u } = await db.auth.getUser(token);
+    const { data: u } = token ? await db.auth.getUser(token) : { data: null };
     if (!u?.user) return json({ error: 'Connexion requise' }, 401);
-    const asUser = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
-    if ((await asUser.rpc('is_admin')).data !== true) return json({ error: 'Réservé aux administrateurs' }, 403);
+    // rôle lu avec la clé de service (pas besoin de la clé anon, absente avec les nouvelles clés API)
+    const prof = unwrap(await db.from('profiles').select('role').eq('user_id', u.user.id).maybeSingle()) as { role: string } | null;
+    if (prof?.role !== 'admin') return json({ error: 'Réservé aux administrateurs' }, 403);
     userId = u.user.id;
     me = { email: u.user.email ?? '', name: u.user.email ?? 'Administrateur' };
   }
@@ -192,4 +205,4 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
-});
+}

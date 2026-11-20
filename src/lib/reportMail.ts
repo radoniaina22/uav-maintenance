@@ -23,10 +23,17 @@ export const SEND_STATUS: Record<SendResult['status'], string> = {
 export async function invokeSend(body: { mode: 'monthly' | 'send'; kind?: ReportKind; month?: string; port?: string | null; test?: boolean; force?: boolean }) {
   const { data, error } = await supabase.functions.invoke(SEND_FUNCTION, { body });
   if (error) {
-    // message d'erreur renvoyé par la fonction (JSON { error })
-    const ctx = (error as { context?: Response }).context;
-    const msg = ctx && typeof ctx.json === 'function' ? await ctx.json().then((j: { error?: string }) => j.error).catch(() => null) : null;
-    throw new Error(msg || "La fonction d'envoi ne répond pas : vérifiez qu'elle est déployée.");
+    // réponse de la fonction : message JSON { error }, sinon code HTTP et début du texte reçu
+    const ctx = (error as { context?: unknown }).context;
+    if (ctx instanceof Response) {
+      const text = await ctx.text().catch(() => '');
+      let msg: string | null = null;
+      try { msg = (JSON.parse(text) as { error?: string }).error ?? null; } catch { /* réponse non JSON */ }
+      throw new Error(msg ?? `La fonction d'envoi a répondu ${ctx.status}${text ? ` : ${text.slice(0, 200)}` : ''}`);
+    }
+    // aucune réponse : réseau, blocage CORS, fonction absente
+    const detail = ctx instanceof Error ? ctx.message : error.message;
+    throw new Error(`La fonction d'envoi est injoignable (${detail}). Vérifiez la connexion et que la fonction « ${SEND_FUNCTION} » est déployée.`);
   }
   return data as { ok: boolean; month: string; dryRun: boolean; results: SendResult[] };
 }
