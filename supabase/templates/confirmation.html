@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<body style="margin:0;padding:0;background:#0b1424;font-family:Inter,Segoe UI,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1424;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#111c30;border:1px solid #22314d;border-radius:16px;">
+        <tr><td style="padding:28px 28px 8px;">
+          <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7fb6ff;">UAV Maintenance · UNFPA Madagascar</div>
+          <h1 style="margin:10px 0 6px;font-size:22px;color:#ffffff;">Confirmez votre adresse email</h1>
+          <p style="margin:0;font-size:14px;line-height:1.55;color:#c7d2e4;">
+            Bonjour,<br>vous venez de créer un compte pilote sur UAV Maintenance avec l'adresse <strong style="color:#ffffff;">{{ .Email }}</strong>.
+            Cliquez sur le bouton ci-dessous pour confirmer votre adresse.
+          </p>
+        </td></tr>
+        <tr><td align="center" style="padding:22px 28px;">
+          <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#2b7be0;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 26px;border-radius:10px;">Confirmer mon adresse</a>
+        </td></tr>
+        <tr><td style="padding:0 28px 26px;">
+          <p style="margin:0 0 10px;font-size:13px;line-height:1.55;color:#c7d2e4;">
+            Ensuite, un administrateur validera votre demande et vous rattachera à votre drone port : vous aurez alors accès aux vols, au carnet de vol et aux données de maintenance.
+          </p>
+          <p style="margin:0;font-size:12px;line-height:1.5;color:#8394b0;">
+            Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
+            <span style="word-break:break-all;color:#7fb6ff;">{{ .ConfirmationURL }}</span><br><br>
+            Vous n'êtes pas à l'origine de cette inscription ? Ignorez simplement cet email.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

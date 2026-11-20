@@ -1,0 +1,61 @@
+import type { Level } from './format';
+import type { PartEventRow, PartRow, PartStatus } from './types';
+
+/** Zones cliquables sur la photo du Tango 4 (positions en % de l'image public/tango4.png) */
+export const TANGO4_ZONES: { code: string; label: string; x: number; y: number }[] = [
+  { code: 'vtol_avg', label: 'VTOL avant gauche', x: 24.4, y: 67.7 },
+  { code: 'vtol_arg', label: 'VTOL arrière gauche', x: 35.6, y: 42.2 },
+  { code: 'vtol_avd', label: 'VTOL avant droit', x: 47.8, y: 83.1 },
+  { code: 'vtol_ard', label: 'VTOL arrière droit', x: 57.2, y: 50.9 },
+  { code: 'propulsion', label: 'Propulsion arrière', x: 47.6, y: 41.5 },
+  { code: 'aile_g', label: 'Aile gauche', x: 18.3, y: 36.2 },
+  { code: 'aile_d', label: 'Aile droite', x: 80.6, y: 60.3 },
+  { code: 'empennage', label: 'Empennage', x: 55.6, y: 22.8 },
+  { code: 'avionique', label: 'Avionique (fuselage)', x: 41.1, y: 57.5 },
+  { code: 'soute', label: 'Soute & largage', x: 37.2, y: 77.5 },
+];
+
+export const zoneLabel = (code: string | null | undefined) => TANGO4_ZONES.find((z) => z.code === code)?.label ?? code ?? '—';
+
+export const PART_STATUS: Record<PartStatus, { label: string; level: Level | 'neutral' | 'info' }> = {
+  stock: { label: 'En stock', level: 'ok' },
+  monte: { label: 'Montée', level: 'info' },
+  quarantaine: { label: 'Quarantaine', level: 'warn' },
+  rebut: { label: 'Rebut', level: 'neutral' },
+};
+
+export const PART_EVENT: Record<PartEventRow['event_type'], { label: string; icon: string }> = {
+  entree_stock: { label: 'Entrée en stock', icon: '＋' },
+  montage: { label: 'Montage', icon: '⤓' },
+  demontage: { label: 'Démontage', icon: '⤒' },
+  quarantaine: { label: 'Mise en quarantaine', icon: '⚠' },
+  remise_en_stock: { label: 'Remise en stock', icon: '↺' },
+  rebut: { label: 'Mise au rebut', icon: '✕' },
+  transfert: { label: 'Transfert', icon: '⇄' },
+};
+
+/** Seuils d'alerte sur le potentiel (heures consommées / potentiel) */
+export const POTENTIAL_WARN_PCT = 90;
+
+export function potentialLevel(p: Pick<PartRow, 'potential_pct'>): Level | 'unknown' {
+  if (p.potential_pct == null) return 'unknown';
+  if (p.potential_pct >= 100) return 'danger';
+  if (p.potential_pct >= POTENTIAL_WARN_PCT) return 'warn';
+  return 'ok';
+}
+
+export const remainingHours = (p: Pick<PartRow, 'total_hours' | 'max_hours_effective'>) =>
+  p.max_hours_effective == null ? null : Number(p.max_hours_effective) - Number(p.total_hours);
+
+/** Valeur par défaut d'un champ datetime-local : maintenant, heure locale */
+export const nowLocal = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
+export const dateTime = (v: string | null | undefined) => {
+  if (!v) return '—';
+  const [d, t] = v.split('T');
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}${t ? ` ${t.slice(0, 5)}` : ''}`;
+};

@@ -1,0 +1,19 @@
+node_modules
+dist
+.env
+.env.local
+*.local
+supabase/.temp
+supabase/.branches
+.DS_Store
+
+# Tests de bout en bout
+playwright-report/
+test-results/
+tests/e2e/.fixture.json
+
+# Sauvegardes locales de la base
+backups/
+
+# Notes personnelles
+Info RDN.txt

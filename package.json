@@ -1,0 +1,47 @@
+{
+  "name": "uav-maintenance",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:push": "supabase db push",
+    "db:backup": "node scripts/db-backup.mjs",
+    "db:restore": "node scripts/db-restore.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report",
+    "sync:windpath": "node -e \"for (const f of ['index.html','script.js','style.css']) { require('fs').copyFileSync('../WindPath/' + f, 'public/windpath/' + f); console.log('copié : ' + f); }\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.2",
+    "jsqr": "^1.4.0",
+    "leaflet": "^1.9.4",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.2",
+    "@types/leaflet": "^1.9.12",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "postgres": "^3.4.5",
+    "supabase": "^2.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "supabase@2.122.1": true
+  }
+}

@@ -1,0 +1,3 @@
+-- Données de développement local (exécutées par `supabase db reset`).
+-- Les 3 drones MAL1/MAL2/MAL3 sont créés par la migration initiale.
+-- Ajoutez ici vos CSB, pilotes et batteries de test si besoin.

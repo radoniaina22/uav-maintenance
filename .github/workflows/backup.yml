@@ -1,0 +1,60 @@
+# Sauvegarde automatique quotidienne de la base Supabase de production.
+# - tous les jours à 02:00 heure de Madagascar (23:00 UTC), et à la demande (bouton « Run workflow »)
+# - sauvegarde complète : schéma + données (schémas public et auth = comptes de connexion)
+# - chiffrée avec BACKUP_PASSPHRASE, conservée 30 jours dans les « artifacts » du workflow
+#
+# Secrets à créer (Settings → Secrets and variables → Actions) :
+#   SUPABASE_DB_URL     chaîne de connexion « Session pooler » (Supabase → Connect),
+#                       ex. postgresql://postgres.<ref>:<mot-de-passe>@aws-0-<region>.pooler.supabase.com:5432/postgres
+#   BACKUP_PASSPHRASE   phrase secrète de chiffrement (à conserver aussi hors de GitHub : sans elle, pas de restauration)
+name: Sauvegarde de la base
+
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Vérification des secrets
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB_URL" ] || [ -z "$PASS" ]; then
+            echo "::error::Secrets SUPABASE_DB_URL et BACKUP_PASSPHRASE requis (voir l'en-tête de ce fichier)."
+            exit 1
+          fi
+
+      - name: Export de la base (pg_dump 17)
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          STAMP=$(TZ=Indian/Antananarivo date +%Y-%m-%d_%H%M)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          docker run --rm -v "$PWD:/out" postgres:17 \
+            pg_dump "$DB_URL" --format=custom --no-owner --no-privileges \
+              --schema=public --schema=auth --exclude-table-data=auth.schema_migrations \
+              --file="/out/uav-maintenance_$STAMP.dump"
+          ls -lh uav-maintenance_*.dump
+
+      - name: Chiffrement
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" \
+              --symmetric --cipher-algo AES256 "uav-maintenance_$STAMP.dump"
+          rm "uav-maintenance_$STAMP.dump"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-${{ env.STAMP }}
+          path: uav-maintenance_*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error

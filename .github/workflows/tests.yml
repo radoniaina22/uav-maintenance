@@ -1,0 +1,66 @@
+# Vérifications automatiques à chaque envoi de code (push) et demande de fusion (pull request) :
+# 1. typage TypeScript + build de production
+# 2. tests de bout en bout (Playwright) contre une base Supabase locale créée à partir des migrations
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: Typage et build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  e2e:
+    name: Tests de bout en bout
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Base Supabase locale (migrations appliquées)
+        run: supabase start -x studio,imgproxy,vector,logflare,inbucket
+      - name: Clés de la base locale
+        run: |
+          supabase status -o env > .supabase.env
+          get() { grep "^$1=" .supabase.env | cut -d= -f2- | tr -d '"'; }
+          {
+            echo "SUPABASE_URL=$(get API_URL)"
+            echo "SUPABASE_ANON_KEY=$(get ANON_KEY)"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(get SERVICE_ROLE_KEY)"
+            echo "SUPABASE_DB_URL=$(get DB_URL)"
+          } >> "$GITHUB_ENV"
+          printf 'VITE_SUPABASE_URL=%s\nVITE_SUPABASE_ANON_KEY=%s\n' "$(get API_URL)" "$(get ANON_KEY)" > .env
+
+      - name: Navigateur Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Tests
+        run: npm run test:e2e
+
+      - name: Rapport des tests (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-playwright
+          path: playwright-report/
+          retention-days: 14
