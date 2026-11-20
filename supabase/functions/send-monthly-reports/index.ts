@@ -57,7 +57,12 @@ async function brevoSend(to: Recipient[], subject: string, html: string, text: s
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 401) {
-    throw new Error(`Brevo refuse la clé API (${body?.message ?? 'non autorisée'}) : vérifiez BREVO_API_KEY (clé API xkeysib-…, active dans Brevo)`);
+    const m = String(body?.message ?? '');
+    if (/IP address/i.test(m)) {
+      // les fonctions Supabase n'ont pas d'adresse IP fixe : impossible de les autoriser une par une
+      throw new Error('Brevo bloque les adresses IP inconnues : désactivez ce blocage dans Brevo (Sécurité → Adresses IP autorisées), les serveurs d\'envoi n\'ayant pas d\'adresse fixe');
+    }
+    throw new Error(`Brevo refuse la clé API (${m || 'non autorisée'}) : vérifiez BREVO_API_KEY (clé API xkeysib-…, active dans Brevo)`);
   }
   if (!res.ok) throw new Error(`Brevo ${res.status} : ${body?.message ?? res.statusText}`);
   return { status: 'envoye' as const, messageId: (body?.messageId as string) ?? null };
