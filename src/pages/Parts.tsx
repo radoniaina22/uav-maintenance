@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { QrScannerModal } from '../components/QrScanner';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchAll, supabase, unwrap } from '../lib/supabase';
 import { byPort, useApp } from '../lib/app';
 import { useData } from '../lib/useData';
@@ -42,8 +41,8 @@ export default function Parts() {
   const setTab = (t: Tab) => { const p = new URLSearchParams(params); p.set('onglet', t); setParams(p, { replace: true }); };
   const [modal, setModal] = useState<ModalState | null>(null);
   const [created, setCreated] = useState<string[] | null>(null);
-  const scan = params.get('scan') === '1';
-  const setScan = (on: boolean) => { const p = new URLSearchParams(params); if (on) p.set('scan', '1'); else p.delete('scan'); setParams(p, { replace: true }); };
+  // ancien lien « ?scan=1 » : le scan se fait désormais dans le mode atelier
+  const legacyScan = params.get('scan') === '1';
 
   const { data, error, loading, reload } = useData(async () => {
     const since = addDays(iso(new Date()), -(FORECAST_WINDOW_DAYS - 1));
@@ -91,6 +90,7 @@ export default function Parts() {
     return { mounted, over, near, undefinedPot, quarantine, lowStock, emptySlots, totalSlots, dues, dueById, soon, stockOf };
   }, [data]);
 
+  if (legacyScan) return <Navigate to="/scan" replace />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} />;
   if (!data || !alerts) return null;
@@ -115,7 +115,7 @@ export default function Parts() {
     <div className="parts-page">
       <PageHeader title="Pièces & stock" subtitle="Potentiel de chaque pièce, configuration des drones, stock de rechange et approvisionnement"
         actions={<>
-          <button className="btn" onClick={() => setScan(true)}>⌗ Scanner</button>
+          <Link className="btn" to="/scan"><Icon name="scan" size={16} /> Mode atelier</Link>
           <button className="btn btn-primary" onClick={() => setModal({ kind: 'create' })}>+ Entrée en stock</button>
         </>} />
 
@@ -172,7 +172,6 @@ export default function Parts() {
       {tab === 'historique' && <HistoryTab portFilter={portFilter} />}
       {tab === 'types' && <TypesTab types={data.types} parts={data.parts} isAdmin={isAdmin} onChanged={reload} />}
 
-      {scan && <QrScannerModal onClose={() => setScan(false)} />}
       {modal?.kind === 'create' && <CreatePartsModal types={data.types} defaultType={modal.type} onClose={close}
         onDone={(codes) => { setModal(null); setCreated(codes); reload(); }} />}
       {modal?.kind === 'unmount' && <UnmountModal part={modal.part} defaultTo={modal.to} onClose={close} onDone={done} />}

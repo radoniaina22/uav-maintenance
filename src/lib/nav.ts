@@ -54,7 +54,7 @@ export const QUICK_ACTIONS: NavItem[] = [
   { to: '/vols?qrf=oui', label: 'Voir les QRF', icon: 'wind', keywords: 'retour météo demi-tour' },
   { to: '/pieces?onglet=stock', label: 'Stock de pièces par drone port', icon: 'box', keywords: 'rechange minimum rupture' },
   { to: '/pieces?onglet=quarantaine', label: 'Pièces en quarantaine', icon: 'wrench', keywords: 'défaillance rebut' },
-  { to: '/pieces?scan=1', label: 'Scanner le QR code d\'une pièce', icon: 'chip', keywords: 'qr code scanner caméra douchette étiquette' },
+  { to: '/scan', label: 'Mode atelier : scanner une pièce ou un drone', icon: 'scan', keywords: 'qr code scanner caméra douchette étiquette monter démonter quarantaine téléphone' },
   { to: '/rapports', label: 'Rapports non clos', icon: 'alert', keywords: 'incident ouvert' },
 ];
 
@@ -69,6 +69,7 @@ export function pageTitle(pathname: string): { section: string; title: string } 
   if (/^\/drones\/[^/]+\/historique/.test(pathname)) return { section: 'Maintenance · Drones', title: 'Historique technique' };
   if (/^\/drones\/[^/]+/.test(pathname)) return { section: 'Maintenance · Drones', title: 'Fiche drone' };
   if (pathname === '/pieces/etiquettes') return { section: 'Maintenance · Pièces', title: 'Étiquettes QR' };
+  if (pathname === '/scan') return { section: 'Maintenance · Pièces', title: 'Mode atelier' };
   if (/^\/pieces\/[^/]+/.test(pathname)) return { section: 'Maintenance · Pièces', title: 'Fiche pièce' };
   if (/^\/batteries\/[^/]+/.test(pathname)) return { section: 'Maintenance · Batteries', title: 'Fiche batterie' };
   if (/^\/carnet\/[^/]+/.test(pathname)) return { section: 'Opérations', title: 'Carnet de vol' };

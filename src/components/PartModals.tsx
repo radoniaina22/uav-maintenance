@@ -52,8 +52,8 @@ function Footer({ form, busy, onClose, label = 'Valider', danger, disabled }: { 
 }
 
 /** Motifs fréquents proposés en un clic */
-const FAILURES = ['Vibrations anormales', 'Roulement bruyant', 'Fissure / casse', 'Surchauffe', 'Choc ou chute', 'Faux contact / connecteur', 'Perte de signal'];
-const GOOD_REASONS = ['Échange préventif', 'Inspection', 'Potentiel atteint', 'Réorganisation du stock', 'Pièce cannibalisée pour un autre drone'];
+export const FAILURES = ['Vibrations anormales', 'Roulement bruyant', 'Fissure / casse', 'Surchauffe', 'Choc ou chute', 'Faux contact / connecteur', 'Perte de signal'];
+export const GOOD_REASONS =['Échange préventif', 'Inspection', 'Potentiel atteint', 'Réorganisation du stock', 'Pièce cannibalisée pour un autre drone'];
 
 /** Carte d'identité compacte d'une pièce */
 function PartChip({ p, label }: { p: PartRow; label?: string }) {

@@ -22,6 +22,7 @@ const Batteries = lazyPage(() => import('./pages/Batteries'));
 const Parts = lazyPage(() => import('./pages/Parts'));
 const PartDetail = lazyPage(() => import('./pages/PartDetail'));
 const PartLabels = lazyPage(() => import('./pages/PartLabels'));
+const Scan = lazyPage(() => import('./pages/Scan'));
 const Consumption = lazyPage(() => import('./pages/Consumption'));
 const FlightCrm = lazyPage(() => import('./pages/FlightCrm'));
 const CrmExport = lazyPage(() => import('./pages/CrmExport'));
@@ -92,6 +93,7 @@ export default function App() {
           <Route path="drones/:id/historique" element={<DroneHistory />} />
           <Route path="pieces" element={<Parts />} />
           <Route path="pieces/etiquettes" element={<PartLabels />} />
+          <Route path="scan" element={<Scan />} />
           <Route path="pieces/:id" element={<PartDetail />} />
           <Route path="batteries" element={<Batteries />} />
           <Route path="batteries/:id" element={<BatteryDetail />} />

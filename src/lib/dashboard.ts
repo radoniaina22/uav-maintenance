@@ -68,13 +68,13 @@ export interface Weather {
 const cache = new Map<string, { at: number; w: Weather }>();
 
 async function fetchWeather(lat: number, lon: number): Promise<Weather> {
-  const key = `v2:${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const key = `v4:${lat.toFixed(3)},${lon.toFixed(3)}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.w;
   const url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
     latitude: String(lat), longitude: String(lon), timezone: 'Indian/Antananarivo', wind_speed_unit: 'ms', forecast_days: '2',
     current: 'temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,precipitation,dew_point_2m,pressure_msl,visibility,cloud_cover_low,cloud_cover_mid,cloud_cover_high',
-    hourly: 'wind_speed_10m,wind_gusts_10m,precipitation_probability,weather_code',
+    hourly: 'wind_speed_10m,wind_gusts_10m,precipitation_probability,precipitation,weather_code',
   });
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Météo indisponible (${r.status})`);
@@ -86,6 +86,16 @@ async function fetchWeather(lat: number, lon: number): Promise<Weather> {
     return { time, wind: j.hourly.wind_speed_10m[k], gust: j.hourly.wind_gusts_10m[k], rainProb: j.hourly.precipitation_probability[k] ?? 0, code: j.hourly.weather_code[k] };
   });
   const C = j.current;
+  // Pluie pour le METAR. Open-Meteo : la valeur horaire à HH:00 porte sur l'heure précédente,
+  // donc le créneau [time[k-1], time[k][ est à l'indice k ; l'heure en cours est à s0 + 1.
+  const s0 = Math.max(0, start);
+  const H = j.hourly;
+  const slot = (k: number) => (k > 0 && k < H.time.length
+    ? { start: H.time[k - 1] as string, end: H.time[k] as string, prob: Number(H.precipitation_probability[k] ?? 0), mm: Number(H.precipitation[k] ?? 0), code: Number(H.weather_code[k] ?? 0) }
+    : null);
+  const cur = slot(s0 + 1), prev = slot(s0);
+  // tendance sur les 3 heures suivant l'heure en cours
+  const next = [slot(s0 + 2), slot(s0 + 3), slot(s0 + 4)].filter((h): h is NonNullable<typeof h> => h != null);
   const w: Weather = {
     current: { time: now, wind: C.wind_speed_10m, gust: C.wind_gusts_10m, dir: C.wind_direction_10m,
       temp: C.temperature_2m, code: C.weather_code, precip: C.precipitation },
@@ -93,7 +103,8 @@ async function fetchWeather(lat: number, lon: number): Promise<Weather> {
     av: {
       offset: Number(j.utc_offset_seconds ?? 10800),
       now: { time: now, wind: C.wind_speed_10m, gust: C.wind_gusts_10m, dir: C.wind_direction_10m, code: C.weather_code, vis: C.visibility ?? 10000,
-        low: C.cloud_cover_low ?? 0, mid: C.cloud_cover_mid ?? 0, high: C.cloud_cover_high ?? 0, temp: C.temperature_2m, dew: C.dew_point_2m, qnh: C.pressure_msl },
+        low: C.cloud_cover_low ?? 0, mid: C.cloud_cover_mid ?? 0, high: C.cloud_cover_high ?? 0, temp: C.temperature_2m, dew: C.dew_point_2m, qnh: C.pressure_msl,
+        nowMm: cur?.mm ?? C.precipitation ?? 0, prevMm: prev?.mm, prevCode: prev?.code, next },
     },
   };
   cache.set(key, { at: Date.now(), w });

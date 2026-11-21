@@ -1,43 +1,163 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-const ROUTE = 'M120 640 C 380 430, 520 660, 760 440 S 1160 170, 1380 270';
+const reduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const p2 = (n: number) => String(n).padStart(2, '0');
+const hdgLabel = (d: number) => {
+  const n = ((d % 360) + 360) % 360;
+  return n === 0 ? 'N' : n === 90 ? 'E' : n === 180 ? 'S' : n === 270 ? 'W' : String(n / 10).padStart(2, '0');
+};
 
-/** Décor animé : un drone suit une route de livraison entre des formations sanitaires */
-function Scene() {
+/**
+ * Écran de vol (PFD) décoratif : horizon artificiel qui suit la souris, bandes vitesse / altitude, cap.
+ * Valeurs fictives (croisière Tango 4), aucune donnée réelle.
+ */
+function Pfd({ phase }: { phase: 'idle' | 'busy' | 'error' }) {
+  const [t, setT] = useState(0);
+  const [ptr, setPtr] = useState({ x: 0.5, y: 0.5 });
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t0 = performance.now();
+    const still = reduceMotion();
+    const id = window.setInterval(() => { if (!still) setT((performance.now() - t0) / 1000); setNow(new Date()); }, still ? 1000 : 80);
+    const move = (e: PointerEvent) => { if (!still) setPtr({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight }); };
+    window.addEventListener('pointermove', move);
+    return () => { clearInterval(id); window.removeEventListener('pointermove', move); };
+  }, []);
+
+  const roll = (ptr.x - 0.5) * 24 + Math.sin(t / 4) * 3;
+  const pitch = (0.5 - ptr.y) * 10 + Math.sin(t / 3.7) * 1.5;
+  const hdg = 74 + Math.sin(t / 9) * 10 + roll * 0.4;
+  const spd = 37 + Math.sin(t / 3.1) * 1.6;
+  const alt = 2790 + Math.sin(t / 5.3) * 40;
+  const vs = Math.cos(t / 5.3) * 40 * (60 / 5.3);
+  const PX = 8; // px par degré de tangage
+
   return (
-    <svg className="login-scene" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden>
+    <svg className={`lx-pfd phase-${phase}`} viewBox="-400 -450 800 900" preserveAspectRatio="xMidYMid slice" aria-hidden>
       <defs>
-        <linearGradient id="routeGrad" x1="0" x2="1">
-          <stop offset="0" stopColor="#22d3ee" stopOpacity="0.1" />
-          <stop offset="0.5" stopColor="#4f9cf9" stopOpacity="0.8" />
-          <stop offset="1" stopColor="#6366f1" stopOpacity="0.2" />
-        </linearGradient>
-        <radialGradient id="droneGlow"><stop offset="0" stopColor="#22d3ee" stopOpacity="0.55" /><stop offset="1" stopColor="#22d3ee" stopOpacity="0" /></radialGradient>
+        <linearGradient id="lxSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#030a1c" /><stop offset="1" stopColor="#1b4f96" /></linearGradient>
+        <linearGradient id="lxGround" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4a3320" /><stop offset="1" stopColor="#0c0805" /></linearGradient>
+        <clipPath id="lxSpd"><rect x="-345" y="-190" width="74" height="380" rx="6" /></clipPath>
+        <clipPath id="lxAlt"><rect x="265" y="-190" width="84" height="380" rx="6" /></clipPath>
+        <clipPath id="lxHdg"><rect x="-200" y="-418" width="400" height="44" rx="6" /></clipPath>
+        <radialGradient id="lxVignette"><stop offset="0.55" stopColor="#000" stopOpacity="0" /><stop offset="1" stopColor="#000" stopOpacity="0.75" /></radialGradient>
       </defs>
-      {Array.from({ length: 19 }, (_, i) => <line key={`v${i}`} className="login-grid" x1={i * 80} y1="0" x2={i * 80} y2="900" />)}
-      {Array.from({ length: 12 }, (_, i) => <line key={`h${i}`} className="login-grid" x1="0" y1={i * 80} x2="1440" y2={i * 80} />)}
-      <path className="login-route" d={ROUTE} />
-      {[[120, 640], [760, 440], [1380, 270]].map(([x, y], i) => (
-        <g key={i}>
-          <circle className="login-csb" cx={x} cy={y} r="5" style={{ animationDelay: `${i * 0.6}s` }} />
-          <circle cx={x} cy={y} r="16" fill="none" stroke="#22d3ee" strokeOpacity="0.25" />
+
+      {/* horizon artificiel */}
+      <g className="lx-horizon" style={{ transform: `rotate(${-roll}deg) translateY(${pitch * PX}px)` }}>
+        <rect x="-1400" y="-1400" width="2800" height="1400" fill="url(#lxSky)" />
+        <rect x="-1400" y="0" width="2800" height="1400" fill="url(#lxGround)" />
+        <line x1="-1400" x2="1400" y1="0" y2="0" stroke="#e8f4ff" strokeWidth="2" />
+        {[-20, -15, -10, -5, 5, 10, 15, 20].map((p) => {
+          const y = -p * PX, w = p % 10 === 0 ? 70 : 34;
+          return (
+            <g key={p} className="lx-ladder">
+              <line x1={-w} x2={w} y1={y} y2={y} />
+              {p % 10 === 0 && <><text x={-w - 10} y={y + 5} textAnchor="end">{Math.abs(p)}</text><text x={w + 10} y={y + 5}>{Math.abs(p)}</text></>}
+            </g>
+          );
+        })}
+      </g>
+      <rect x="-400" y="-450" width="800" height="900" fill="url(#lxVignette)" />
+
+      {/* arc d'inclinaison */}
+      <g className="lx-sym">
+        <path d="M -199 -115 A 230 230 0 0 1 199 -115" fill="none" />
+        {[-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60].map((a) => (
+          <line key={a} x1="0" x2="0" y1="-230" y2={a % 30 === 0 ? -250 : -242} transform={`rotate(${a})`} />
+        ))}
+        <path d="M 0 -228 l -9 -14 h 18 z" className="lx-fill" />
+        <g style={{ transform: `rotate(${-roll}deg)` }} className="lx-horizon"><path d="M 0 -226 l -10 16 h 20 z" className="lx-amber-fill" /></g>
+      </g>
+
+      {/* maquette avion */}
+      <g className="lx-plane">
+        <path d="M -150 0 H -62 L -40 22 M 150 0 H 62 L 40 22" />
+        <rect x="-5" y="-5" width="10" height="10" />
+      </g>
+
+      {/* bande de vitesse (kt) */}
+      <g className="lx-tape">
+        <rect x="-345" y="-190" width="74" height="380" rx="6" />
+        <g clipPath="url(#lxSpd)">
+          <g transform={`translate(0 ${spd * 14})`}>
+            {Array.from({ length: 31 }, (_, i) => 22 + i).map((v) => (
+              <g key={v}>
+                <line x1="-271" x2={v % 5 === 0 ? -287 : -279} y1={-v * 14} y2={-v * 14} />
+                {v % 5 === 0 && <text x="-293" y={-v * 14 + 5} textAnchor="end">{v}</text>}
+              </g>
+            ))}
+          </g>
         </g>
-      ))}
-      <g>
-        <animateMotion dur="16s" repeatCount="indefinite" rotate="auto" path={ROUTE} keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.45 0 0.55 1" />
-        <circle r="46" fill="url(#droneGlow)" />
-        <g stroke="#e8eef9" strokeWidth="2" strokeLinecap="round" fill="none">
-          <path d="M-18 0 H18" />
-          <path d="M-4 -26 V26" strokeWidth="2.5" />
-          <path d="M-10 -9 H6 M-10 9 H6" />
-          <circle cx="-10" cy="-9" r="5" strokeOpacity="0.6" />
-          <circle cx="-10" cy="9" r="5" strokeOpacity="0.6" />
-          <circle cx="6" cy="-9" r="5" strokeOpacity="0.6" />
-          <circle cx="6" cy="9" r="5" strokeOpacity="0.6" />
+        <path d="M -352 -18 h 70 l 12 18 l -12 18 h -70 z" className="lx-box" />
+        <text x="-292" y="8" textAnchor="end" className="lx-big">{Math.round(spd)}</text>
+        <text x="-308" y="-206" textAnchor="middle" className="lx-unit">KT</text>
+      </g>
+
+      {/* bande d'altitude (ft) */}
+      <g className="lx-tape">
+        <rect x="265" y="-190" width="84" height="380" rx="6" />
+        <g clipPath="url(#lxAlt)">
+          <g transform={`translate(0 ${alt * 1.2})`}>
+            {Array.from({ length: 31 }, (_, i) => 2500 + i * 20).map((v) => (
+              <g key={v}>
+                <line x1="265" x2={v % 100 === 0 ? 281 : 273} y1={-v * 1.2} y2={-v * 1.2} />
+                {v % 100 === 0 && <text x="287" y={-v * 1.2 + 5}>{v}</text>}
+              </g>
+            ))}
+          </g>
         </g>
+        <path d="M 256 0 l 12 -18 h 88 v 36 h -88 z" className="lx-box" />
+        <text x="276" y="8" className="lx-big">{Math.round(alt / 10) * 10}</text>
+        <text x="307" y="-206" textAnchor="middle" className="lx-unit">FT</text>
+        <text x="307" y="222" textAnchor="middle" className="lx-unit">{vs >= 0 ? '▲' : '▼'} {Math.abs(Math.round(vs / 10) * 10)} FPM</text>
+      </g>
+
+      {/* cap (descendu de 50 px pour rester visible quand l'écran est rogné) */}
+      <g className="lx-tape" transform="translate(0 50)">
+        <rect x="-200" y="-418" width="400" height="44" rx="6" />
+        <g clipPath="url(#lxHdg)">
+          <g transform={`translate(${-hdg * 5} 0)`}>
+            {Array.from({ length: 49 }, (_, i) => i * 5).map((d) => (
+              <g key={d}>
+                <line x1={d * 5} x2={d * 5} y1="-374" y2={d % 10 === 0 ? -386 : -380} />
+                {d % 30 === 0 && <text x={d * 5} y="-392" textAnchor="middle">{hdgLabel(d)}</text>}
+              </g>
+            ))}
+          </g>
+        </g>
+        <path d="M -30 -446 h 60 v 24 h -22 l -8 8 l -8 -8 h -22 z" className="lx-box" />
+        <text x="0" y="-428" textAnchor="middle" className="lx-mid">{String(Math.round(((hdg % 360) + 360) % 360)).padStart(3, '0')}°</text>
+      </g>
+
+      {/* bandeau d'état */}
+      <g className="lx-status">
+        <text x="-345" y="300">TANGO 4 · AUTO</text>
+        <text x="-345" y="326" className="lx-dim">S 21°16′ · E 047°28′</text>
+        <text x="345" y="300" textAnchor="end">{p2(now.getUTCHours())}:{p2(now.getUTCMinutes())}:{p2(now.getUTCSeconds())}Z</text>
+        <text x="345" y="326" textAnchor="end" className="lx-dim">LOCAL {now.toLocaleTimeString('fr-FR', { timeZone: 'Indian/Antananarivo', hour: '2-digit', minute: '2-digit' })}</text>
+        <text x="0" y="300" textAnchor="middle" className={`lx-flag lx-flag-${phase}`}>
+          {phase === 'busy' ? 'CONTRÔLE ACCÈS…' : phase === 'error' ? 'ACCÈS REFUSÉ' : 'PRÊT · EN ATTENTE ÉQUIPAGE'}
+        </text>
       </g>
     </svg>
+  );
+}
+
+/** Check-list avant vol du formulaire de connexion */
+function Checklist({ items }: { items: { label: string; ok: boolean; hint: string }[] }) {
+  return (
+    <ol className="lx-check" aria-label="Check-list de connexion">
+      {items.map((it) => (
+        <li key={it.label} className={it.ok ? 'ok' : ''}>
+          <span className="lx-tick" aria-hidden>{it.ok ? '✓' : ''}</span>
+          <span>{it.label}</span>
+          <span className="lx-dots" aria-hidden />
+          <span className="lx-state">{it.ok ? 'OK' : it.hint}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -162,11 +282,18 @@ export default function Login() {
     setBusy(false);
   }
 
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const phase = busy ? 'busy' : error ? 'error' : 'idle';
+
   return (
-    <div className="center-screen login-bg">
-      <Scene />
-      <div className="login-orb" style={{ width: 380, height: 380, left: '8%', top: '12%', background: '#6366f1' }} />
-      <div className="login-orb" style={{ width: 320, height: 320, right: '10%', bottom: '8%', background: '#0891b2', animationDelay: '-4s' }} />
+    <div className="lx">
+      <aside className="lx-hud" aria-hidden>
+        <Pfd phase={phase} />
+        <div className="lx-hud-caption">
+          <span className="lx-live" /> Flotte Tango 4 · livraisons médicales UNFPA · Madagascar
+        </div>
+      </aside>
+      <main className="lx-side">
       {mode === 'signup' ? (
         <SignupForm onCancel={() => setMode('login')}
           onDone={(mail, needsConfirm) => {
@@ -198,12 +325,25 @@ export default function Login() {
           <span className="field-label">Mot de passe</span>
           <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
+        <Checklist items={[
+          { label: 'Identifiant', ok: emailOk, hint: 'à saisir' },
+          { label: 'Mot de passe', ok: password.length > 0, hint: 'à saisir' },
+          { label: 'Autorisation', ok: false, hint: busy ? 'contrôle…' : error ? 'refusée' : 'au décollage' },
+        ]} />
         {notice && <div className="alert alert-ok">{notice}</div>}
         {error && <div className="alert alert-danger">{error}</div>}
-        <button className="btn btn-primary btn-block" disabled={busy} style={{ height: 44 }}>{busy ? 'Connexion…' : 'Se connecter'}</button>
+        <button className={`btn btn-primary btn-block lx-go${emailOk && password ? ' armed' : ''}`} disabled={busy} style={{ height: 46 }}>
+          <svg className="lx-prop" viewBox="-10 -10 20 20" aria-hidden>
+            <g fill="currentColor">
+              {[0, 120, 240].map((a) => <ellipse key={a} cx="0" cy="-5" rx="2.4" ry="5" transform={`rotate(${a})`} />)}
+              <circle r="2.2" />
+            </g>
+          </svg>{busy ? 'Contrôle des accès…' : 'Se connecter'}
+        </button>
         <p className="muted small login-switch">Pas encore de compte ? <button type="button" className="link-btn" onClick={() => { setNotice(null); setError(null); setMode('signup'); }}>Créer un compte pilote</button></p>
       </form>
       )}
+      </main>
     </div>
   );
 }

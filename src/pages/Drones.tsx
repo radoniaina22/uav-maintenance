@@ -184,6 +184,7 @@ export default function Drones() {
             <button type="button" role="tab" aria-selected={view === 'hangar'} className={view === 'hangar' ? 'active' : ''} onClick={() => pickView('hangar')}>Hangar</button>
             <button type="button" role="tab" aria-selected={view === 'tableau'} className={view === 'tableau' ? 'active' : ''} onClick={() => pickView('tableau')}>Tableau</button>
           </div>
+          {!!data?.drones.length && <Link className="btn" to={`/pieces/etiquettes?drones=${data.drones.map((d) => d.id).join(',')}`} title="Étiquettes à coller sur les drones, lues par le mode atelier">🏷 Étiquettes QR</Link>}
           {isAdmin && <button className="btn" onClick={() => setModal({ drone: null })}>+ Ajouter un drone</button>}
         </>} />
       {!loading && data?.drones.length === 0 && <Empty>Aucun drone pour ce drone port.</Empty>}

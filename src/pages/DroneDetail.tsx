@@ -160,6 +160,7 @@ export default function DroneDetail() {
           <Link className="btn btn-primary" to={`/drones/${d.id}/historique`}>🛠 Historique technique</Link>
           <Link className="btn" to={`/ordres-travail?drone=${d.id}&nouveau=1`}>📋 Ouvrir un OT</Link>
           <Link className="btn" to={`/pieces?drone=${d.id}`}>⛭ Pièces montées</Link>
+          <Link className="btn" to={`/pieces/etiquettes?drones=${d.id}`} title="Étiquette à coller sur le drone, lue par le mode atelier">🏷 Étiquette QR</Link>
           <Link className="btn" to={`/consommation?drone=${d.id}`}>⚡ Consommation</Link>
           {isAdmin && <button className="btn" onClick={() => setEditDrone(true)}>Modifier</button>}
           <button className="btn btn-primary" onClick={() => setVisitModal({ visit: null })}>+ Enregistrer une visite</button>

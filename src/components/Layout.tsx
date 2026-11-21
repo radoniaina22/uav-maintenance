@@ -161,6 +161,9 @@ export default function Layout() {
           </ErrorBoundary>
         </div>
       </main>
+      {loc.pathname !== '/scan' && (
+        <Link to="/scan" className="scan-fab" aria-label="Mode atelier : scanner une pièce" title="Scanner une pièce ou un drone"><Icon name="scan" size={24} /></Link>
+      )}
       <CommandPalette open={palette} onClose={() => setPalette(false)} isAdmin={isAdmin} />
     </div>
   );
