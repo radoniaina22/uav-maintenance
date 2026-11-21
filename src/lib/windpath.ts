@@ -22,6 +22,55 @@ export interface WindpathResult {
   payloadKg: number | null;
   /** estimation seule (sans valeurs réelles), enregistrée avec le vol */
   estimate?: PlanEstimate;
+  /** mission complète (rapport WindPath joint au CRM) */
+  record?: WindpathRecord | null;
+}
+
+/** Point de passage de la mission conservée avec le vol (heures en ms epoch) */
+export interface WindpathRecordPoint {
+  n: string;
+  name: string | null;
+  lat: number | null;
+  lon: number | null;
+  alt: number | null;
+  phases: string[];
+  drop: boolean;
+  eta: number | null;
+  pass: number | null;
+  /** heure de passage appliquée automatiquement (estimation, pas de saisie du pilote) */
+  passAuto: boolean;
+  windMs: number | null;
+  windDir: number | null;
+  gust: number | null;
+  groundSpeed: number | null;
+  currentA: number | null;
+  estLegMah: number | null;
+  estCumMah: number | null;
+  realCumMah: number | null;
+  mahAuto: boolean;
+  estV: number | null;
+  realV: number | null;
+  vAuto: boolean;
+}
+
+/** Mission WindPath complète du vol (table flight_windpath_records) */
+export interface WindpathRecord {
+  v: 1;
+  capturedAt: number;
+  missionName: string | null;
+  planId: string | null;
+  takeoffPlanned: string | null;
+  capacityMah: number | null;
+  departureVoltage: number | null;
+  payloadKg: number | null;
+  cruiseSpeedMs: number | null;
+  reservePct: number;
+  windCheckedAt: number | null;
+  summary: {
+    distanceKm: number | null; estimatedMah: number | null; finalVoltage: number | null; marginPct: number | null;
+    durationMin: number | null; maxWindMs: number | null; maxGustMs: number | null; delayS: number | null;
+  };
+  points: WindpathRecordPoint[];
 }
 
 /** Estimation WindPath retenue pour un vol (table flight_plan_estimates) */
@@ -130,6 +179,8 @@ export interface FlightNavState {
   windpathLabels?: string[];
   /** estimation à enregistrer avec le vol (comparaison prévu / réel) */
   estimate?: PlanEstimate | null;
+  /** mission complète à enregistrer avec le vol (rapport WindPath joint au CRM) */
+  record?: WindpathRecord | null;
 }
 
 export interface TransferField {

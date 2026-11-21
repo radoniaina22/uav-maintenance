@@ -2625,7 +2625,38 @@ html.is-scrolling .container { pointer-events: none; }
 .archive-toast code { font-size: 12px; color: #e6f0ff; word-break: break-word; }
 
 .crm-offscreen { position: fixed !important; left: -12000px; top: 0; width: 820px; pointer-events: none; }
-.crm-offscreen > :not(.crm-sheet) { display: none !important; }
+.crm-offscreen > :not(.crm-doc) { display: none !important; }
+
+/* ---------- Dossier du vol : CRM + rapport de vol WindPath (annexe, même PDF) ---------- */
+.crm-doc { display: grid; gap: 24px; }
+.wp-sheet .crm-cells { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.wp-map { display: block; width: 100%; height: auto; }
+.wp-legend, .wp-note { margin: 0; padding: 4px 8px 6px; font-size: 7.5pt; }
+.wp-note { padding: 0 2px 6px; }
+.wp-sw { display: inline-block; width: 14px; height: 3px; vertical-align: middle; border-radius: 2px; }
+.wp-sw.plan { background: repeating-linear-gradient(90deg, #2b6fd6 0 5px, transparent 5px 8px); }
+.wp-sw.flown { background: #1f9d5c; height: 4px; }
+.wp-sw.drop { width: 8px; height: 8px; background: #f0a020; transform: rotate(45deg); }
+.wp-points th, .wp-points td { padding: 2px 5px !important; font-size: 7.8pt !important; }
+.wp-points tr.wp-drop td { background: #fff4d6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.wp-auto { margin-left: 2px; color: #b26a00; font-weight: 800; }
+.wp-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 4px 6px; }
+.wp-chart svg { display: block; width: 100%; height: auto; }
+.wp-empty { padding: 8px; font-size: 8.5pt; }
+.archive-blocked { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+@media print {
+  .crm-doc { display: block; }
+  .crm-doc .wp-sheet { break-before: page; page-break-before: always; }
+}
+/* rapport imprimé depuis la planification : feuille hors écran, seule imprimée */
+.pl-print { position: fixed; left: -12000px; top: 0; width: 210mm; pointer-events: none; }
+@media print {
+  body:has(.pl-print) { background: #fff !important; }
+  body:has(.pl-print) > *:not(.pl-print) { display: none !important; }
+  body:has(.pl-print) * { animation: none !important; transition: none !important; }
+  .pl-print { position: static; width: auto; }
+  .pl-print .crm-sheet { max-width: none; padding: 0; box-shadow: none; border-radius: 0; font-size: 9.5pt; }
+}
 
 /* ================= Export des CRM ================= */
 .export-page { display: flex; flex-direction: column; gap: 16px; }

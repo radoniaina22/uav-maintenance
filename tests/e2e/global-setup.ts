@@ -15,6 +15,7 @@ export async function cleanE2E(sql: postgres.Sql) {
       await tx`delete from work_orders where drone_id = any(${ids})`;
       await tx`delete from crm_signatures where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from flight_plan_estimates where flight_id in (select id from flights where drone_id = any(${ids}))`;
+      await tx`delete from flight_windpath_records where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from technical_reports where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from logbook_entries where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from flight_pilots where flight_id in (select id from flights where drone_id = any(${ids}))`;

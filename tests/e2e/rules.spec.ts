@@ -373,3 +373,18 @@ test.describe('Vols en cours partagés (trafic)', () => {
     expect(await ok(nord2.from('live_flights').select('user_id').eq('user_id', me))).toHaveLength(0);
   });
 });
+
+test.describe('Mission WindPath jointe au CRM', () => {
+  const record = { v: 1, capturedAt: Date.now(), missionName: 'E2E mission', points: [{ n: '0', lat: -18.91, lon: 47.53 }], summary: {} };
+
+  test('le drone port du vol enregistre la mission ; un autre drone port ne la voit ni ne la modifie', async () => {
+    const nord = await as('nord'), nord2 = await as('nord2'), sud = await as('sud');
+    await ok(nord.from('flight_windpath_records').upsert({ flight_id: flightId, record }));
+    const got = await ok(nord2.from('flight_windpath_records').select('record').eq('flight_id', flightId).single());
+    expect((got.record as { missionName: string }).missionName).toBe('E2E mission');
+    expect(await ok(sud.from('flight_windpath_records').select('flight_id').eq('flight_id', flightId))).toHaveLength(0);
+    await expectError(sud.from('flight_windpath_records').upsert({ flight_id: flightId, record: { ...record, missionName: 'pirate' } }).select('flight_id').single());
+    // une mission qui n'est pas un objet JSON est refusée
+    await expectError(nord.from('flight_windpath_records').upsert({ flight_id: flightId, record: [1, 2] }));
+  });
+});

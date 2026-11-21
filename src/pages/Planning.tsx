@@ -10,6 +10,9 @@ import {
   TransferField, transferFields, WindpathLive, WindpathResult, WindpathStatus,
 } from '../lib/windpath';
 import { useLiveTraffic } from '../lib/liveTraffic';
+import { createPortal } from 'react-dom';
+import WindpathReport from '../components/WindpathReport';
+import type { WindpathRecord } from '../lib/windpath';
 
 const WINDPATH_URL = './windpath/index.html';
 const LAYOUT_KEY = 'uav.planning.layout';
@@ -35,10 +38,24 @@ const readLayout = (): PlanningLayout => {
   try { const v = localStorage.getItem(LAYOUT_KEY); return v === 'map' || v === 'entry' ? v : 'balanced'; } catch { return 'balanced'; }
 };
 
+/** En-tête du rapport imprimé depuis la planification (vol pas encore enregistré : pas de n° CRM) */
+function printFlight(rec: WindpathRecord, ctx: { droneCode: string; destination: string | null; pilots: string[]; portName: string | null }) {
+  const first = rec.points[0];
+  const ts = first?.pass ?? first?.eta ?? (rec.takeoffPlanned ? Date.parse(rec.takeoffPlanned) : rec.capturedAt);
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return {
+    crmNo: null, ...ctx,
+    flightDate: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    takeoffTime: `${p(d.getHours())}:${p(d.getMinutes())}`,
+    consumptionMah: null, voltageEndV: null,
+  };
+}
+
 export default function Planning() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { ports, portFilter, myPort, isAdmin, session } = useApp();
+  const { ports, portFilter, myPort, isAdmin, session, pilot } = useApp();
   const incoming = (loc.state ?? null) as PlanningNavState | null;
   const frame = useRef<HTMLIFrameElement>(null);
   const shell = useRef<HTMLDivElement>(null);
@@ -56,6 +73,10 @@ export default function Planning() {
   const [layout, setLayout] = useState<PlanningLayout>(readLayout);
   const [details, setDetails] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /** atterrissage enregistré dans WindPath : rappel de reporter la mission dans le vol */
+  const [landed, setLanded] = useState(false);
+  /** impression demandée dans WindPath : rapport de vol au format du CRM */
+  const [printRecord, setPrintRecord] = useState<WindpathRecord | null>(null);
 
   // drone port et destination de la planification
   const portId = incoming?.portId || portFilter || myPort?.id || '';
@@ -161,6 +182,11 @@ export default function Planning() {
       if (msg.type === 'prefilled') setPrefillInfo((msg.applied ?? []).filter((a) => a !== 'carte centrée sur le drone port' || !!incoming?.prefill));
       if (msg.type === 'status') setStatus(msg.data as WindpathStatus);
       if (msg.type === 'live') void shareLive((msg.data ?? null) as WindpathLive | null);
+      if (msg.type === 'landed') setLanded(true);
+      if (msg.type === 'print') {
+        const rec = (msg as { record?: WindpathRecord | null }).record ?? null;
+        if (rec) setPrintRecord(rec); else setError(msg.error ?? 'Aucune mission à imprimer.');
+      }
       if (msg.type === 'planLoaded') {
         if (msg.ok) { setNotice(`Plan « ${msg.name} » chargé (${msg.count} points). Pensez à vérifier le vent.`); setRestored(null); setError(null); }
         else setError(msg.error ?? 'Plan illisible.');
@@ -230,6 +256,16 @@ export default function Planning() {
     return () => { window.removeEventListener('blur', close); document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [details]);
 
+  // impression du rapport : la feuille est rendue, puis la page s'imprime (seule la feuille apparaît)
+  useEffect(() => {
+    if (!printRecord) return;
+    let done = false;
+    const end = () => { if (!done) { done = true; setPrintRecord(null); } };
+    window.addEventListener('afterprint', end, { once: true });
+    void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => { window.print(); end(); })));
+    return () => window.removeEventListener('afterprint', end);
+  }, [printRecord]);
+
   // messages brefs : disparaissent seuls
   useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(null), 6000); return () => clearTimeout(t); }, [notice]);
   useEffect(() => { if (!prefillInfo) return; const t = setTimeout(() => setPrefillInfo(null), 9000); return () => clearTimeout(t); }, [prefillInfo]);
@@ -258,6 +294,7 @@ export default function Planning() {
       windpath: Object.fromEntries(chosen.map((f) => [f.key, f.value])),
       windpathLabels: chosen.map((f) => `${f.label} : ${f.display}${f.source === 'estime' ? ' (estimé)' : ''}`),
       estimate: keepEstimate && result?.estimate ? result.estimate : null,
+      record: keepEstimate && result?.record ? result.record : null,
     };
     nav(incoming?.returnTo ?? '/vols/nouveau', { state });
   }
@@ -383,6 +420,15 @@ export default function Planning() {
       <div className="pl-stage">
         {/* messages flottants : ne décalent pas WindPath */}
         <div className="pl-toasts" aria-live="polite">
+          {landed && (
+            <div className="pl-toast ok">
+              <span>🛬 <strong>Mission terminée.</strong> Reportez-la dans le vol : le rapport WindPath sera joint au CRM et exporté avec lui après les signatures.</span>
+              <button className="btn btn-primary btn-sm" onClick={() => { setLanded(false); requestResult(); }}>
+                {incoming?.returnTo ? 'Reporter dans le vol →' : 'Créer le vol →'}
+              </button>
+              <button className="pl-x" onClick={() => setLanded(false)} aria-label="Fermer">✕</button>
+            </div>
+          )}
           {restored && (
             <div className="pl-toast">
               <span>↺ Mission retrouvée{restored.missionName ? <> : <strong>{restored.missionName}</strong></> : null} <span className="muted">({ago(restored.savedAt)})</span></span>
@@ -405,6 +451,18 @@ export default function Planning() {
         </div>
         <iframe ref={frame} className={`planning-frame${ready ? ' is-ready' : ''}`} src={WINDPATH_URL} title="WindPath – planificateur de vent et d'énergie" onLoad={onLoad} />
       </div>
+
+      {printRecord && createPortal(
+        <div className="pl-print">
+          <WindpathReport record={printRecord} flight={printFlight(printRecord, {
+            droneCode: drone?.code ?? '—',
+            destination: facilities.find((f) => f.id === destinationId)?.name ?? null,
+            pilots: pilot?.full_name ? [pilot.full_name] : [],
+            portName: port?.name ?? null,
+          })} />
+        </div>,
+        document.body,
+      )}
 
       {fields && result && (
         <Modal title={incoming?.returnTo ? 'Reporter dans le vol' : 'Créer un vol avec les données WindPath'} onClose={() => setFields(null)}
@@ -432,7 +490,7 @@ export default function Planning() {
           {result.estimate && (result.estimate.consumptionMah != null ? (
             <label className={`transfer-row pl-keep${keepEstimate ? ' active' : ''}`}>
               <input type="checkbox" checked={keepEstimate} onChange={(e) => setKeepEstimate(e.target.checked)} />
-              <span className="transfer-label">Enregistrer l'estimation avec le vol</span>
+              <span className="transfer-label">Enregistrer la mission avec le vol (prévu / réel, rapport WindPath joint au CRM)</span>
               <strong>{mah(result.estimate.consumptionMah)} · {minutes(result.estimate.durationMin)}</strong>
               <Badge level="info">prévu / réel</Badge>
             </label>

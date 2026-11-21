@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { archiveSupported, archivedOn, elementToPdf, getArchiveRoot, markArchived, rememberedFolder, saveToArchive, SaveResult } from '../lib/localArchive';
+import { archiveSupported, archivedOn, crmDocumentToPdf, getArchiveRoot, markArchived, rememberedFolder, saveToArchive, SaveResult } from '../lib/localArchive';
+import WindpathReport from '../components/WindpathReport';
+import type { WindpathRecord } from '../lib/windpath';
 import { crmArchivePath } from '../lib/crmArchive';
 import { supabase, unwrap } from '../lib/supabase';
 import { useData } from '../lib/useData';
@@ -51,6 +53,14 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
   const params = useParams() as { id: string };
   const id = flightId ?? params.id;
   const sheetRef = useRef<HTMLElement>(null);
+  /** dossier du vol : CRM + rapport WindPath (un seul PDF) */
+  const docRef = useRef<HTMLDivElement>(null);
+  /**
+   * Export automatique demandé après une signature : nombre de signatures attendu une fois
+   * les données rechargées (0 = rien à faire). Lancé seulement si le CRM est alors complet.
+   */
+  const [autoExport, setAutoExport] = useState(0);
+  const [autoBlocked, setAutoBlocked] = useState(false);
   const { session, profile, pilot, myPort, isAdmin } = useApp();
   const [signing, setSigning] = useState<CrmVisaKind | null>(null);
   const [editReport, setEditReport] = useState<TechnicalReport | null>(null);
@@ -61,25 +71,28 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
   const lastArchive = archivedOn(id);
   useEffect(() => { rememberedFolder().then(setFolder); }, [saved]);
   const { data, error, loading, reload } = useData(async () => {
-    const [f, r, c, s, fp] = await Promise.all([
+    const [f, r, c, s, fp, wr] = await Promise.all([
       supabase.from('v_flights').select('*').eq('id', id).single(),
       supabase.from('technical_reports').select('*').eq('flight_id', id).order('created_at'),
       supabase.rpc('crm_flight', { p_flight: id }),
       supabase.from('crm_signatures').select('*').eq('flight_id', id),
       supabase.from('flight_pilots').select('*, pilots(full_name)').eq('flight_id', id),
+      supabase.from('flight_windpath_records').select('record').eq('flight_id', id).maybeSingle(),
     ]);
     return {
       f: unwrap(f) as FlightRow, reports: unwrap(r) as TechnicalReport[], crm: unwrap(c) as CrmData,
       signatures: unwrap(s) as CrmSignature[], crew: unwrap(fp) as (FlightPilot & { pilots: { full_name: string } | null })[],
+      // mission WindPath : facultative (vol saisi sans planification), une erreur ne bloque pas le CRM
+      windpath: ((wr.data as { record: WindpathRecord } | null)?.record ?? null),
     };
   }, [id]);
 
   // export groupé : prévient le parent une fois le CRM rendu (polices et mise en page prêtes)
   const notified = useRef<string | null>(null);
   useEffect(() => {
-    if (!onReady || !data || !sheetRef.current || notified.current === id) return;
+    if (!onReady || !data || !docRef.current || notified.current === id) return;
     notified.current = id;
-    const el = sheetRef.current;
+    const el = docRef.current;
     const expected = 1 + (data.crew.some((c) => c.role === 'copilote') ? 1 : 0) + (data.reports.length ? 1 : 0);
     const info: CrmReadyInfo = {
       crmNo: `${data.crm.drone_code}-${String(data.crm.flight_seq).padStart(4, '0')}`,
@@ -88,6 +101,16 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
     };
     document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => onReady(el, info))));
   }, [data, id, onReady]);
+
+  // export automatique : après la dernière signature, le dossier du vol (CRM + WindPath) est enregistré
+  const saveRef = useRef<((forcePick?: boolean, auto?: boolean) => Promise<void>) | null>(null);
+  useEffect(() => {
+    if (!autoExport || !data || onReady) return;
+    if (data.signatures.length < autoExport) return; // données pas encore rechargées après la signature
+    setAutoExport(0);
+    if (data.f.status !== 'cloture' || missingVisas(data).length) return; // d'autres signatures sont attendues
+    void saveRef.current?.(false, true);
+  }, [autoExport, data, onReady]);
 
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} />;
@@ -127,13 +150,19 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
     window.print();
   }
 
-  /** Enregistre le PDF du CRM dans Drone / Année / Mois / jj-mm-aaaa / Vol N (CSB) / sur l'ordinateur */
-  async function saveLocal(forcePick = false) {
-    if (missing.length && !window.confirm(`Le CRM n'est pas entièrement signé (manque : ${missing.join(', ')}).\nEnregistrer quand même ?`)) return;
-    const sheet = document.querySelector<HTMLElement>('.crm-sheet');
-    if (!sheet) return;
+  /**
+   * Enregistre le dossier du vol (CRM, puis rapport WindPath s'il existe, dans un seul PDF)
+   * dans Drone / Année / Mois / jj-mm-aaaa / Vol N (CSB) / sur l'ordinateur.
+   * `auto` : lancé après la dernière signature (pas de confirmation ; si le navigateur exige
+   * un clic pour autoriser le dossier, un bouton est proposé).
+   */
+  async function saveLocal(forcePick = false, auto = false) {
+    if (!auto && missing.length && !window.confirm(`Le CRM n'est pas entièrement signé (manque : ${missing.join(', ')}).\nEnregistrer quand même ?`)) return;
+    const doc = docRef.current;
+    if (!doc) return;
     setActionError(null);
     setSaved(null);
+    setAutoBlocked(false);
     setSaving(true);
     try {
       // le dossier se choisit tout de suite (le navigateur exige que ce soit juste après le clic)
@@ -146,18 +175,21 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
         droneCode: crm.drone_code, flightDate: f.flight_date, takeoff: f.takeoff_time, destination: f.destination_name,
         flightType: f.flight_type, rank, crmNo, closed,
       });
-      const blob = await elementToPdf(sheet);
+      const blob = await crmDocumentToPdf(doc);
       const res = await saveToArchive(segments, fileName, blob, false, root);
       markArchived(f.id);
       setSaved(res);
     } catch (e) {
       // fenêtre de choix du dossier fermée par l'utilisateur : rien à signaler
       if (e instanceof DOMException && e.name === 'AbortError') return;
+      // export automatique : le navigateur exige un clic pour ouvrir ou réautoriser le dossier
+      if (auto && e instanceof DOMException && (e.name === 'SecurityError' || e.name === 'NotAllowedError')) { setAutoBlocked(true); return; }
       setActionError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
   }
+  saveRef.current = saveLocal;
   async function unsign(k: CrmVisaKind) {
     if (!window.confirm('Annuler cette signature ?')) return;
     setActionError(null);
@@ -189,6 +221,12 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
             : <>PDF téléchargé (<code>{saved.path}</code>). Votre navigateur ne permet pas de créer les dossiers automatiquement : utilisez Chrome ou Edge sur ordinateur pour le classement Drone / Année / Mois / Jour / Vol.</>}</span>
         </div>
       )}
+      {autoBlocked && (
+        <div className="alert alert-info no-print archive-blocked">
+          <span>✍ CRM signé : le dossier du vol (CRM{data.windpath ? ' + rapport WindPath' : ''}) est prêt. Le navigateur demande votre accord pour écrire dans le dossier d'archive.</span>
+          <button className="btn btn-primary btn-sm" onClick={() => void saveLocal(false, true)}>💾 Enregistrer le dossier du vol</button>
+        </div>
+      )}
       <ErrorBox error={actionError} />
       {myTurn && (
         <div className="alert alert-warn no-print">✍ Votre signature est attendue sur ce CRM : utilisez le bouton « Signer » dans la section Visas.</div>
@@ -198,6 +236,7 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
           {openReports} compte(s) rendu(s) à traiter : renseignez la mesure corrective et clôturez-les (bouton « Traiter » en section 5), puis signez le visa « Mesures correctives ».
         </div>
       )}
+      <div ref={docRef} className="crm-doc">
       <article ref={sheetRef} className={`crm-sheet${closed ? '' : ' is-draft'}`}>
         <header className="crm-head">
           <UavLogo className="crm-logo" />
@@ -382,11 +421,19 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
           <span>Édité le {new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} · UAV Maintenance</span>
         </footer>
       </article>
+      {/* annexe : rapport de vol WindPath (même PDF, nouvelle page) */}
+      {data.windpath && (
+        <WindpathReport record={data.windpath} flight={{
+          crmNo, droneCode: crm.drone_code, flightDate: f.flight_date, takeoffTime: f.takeoff_time, destination: f.destination_name,
+          pilots, portName: f.drone_port_name, consumptionMah: f.consumption_mah, voltageEndV: f.voltage_end_v,
+        }} />
+      )}
+      </div>
 
       {signing && (
         <SignModal kind={signing} crmNo={crmNo} name={pilot?.full_name ?? session.user.email ?? ''} reportCount={reports.length}
           onClose={() => setSigning(null)}
-          onSigned={() => { setSigning(null); notifyCrmChanged(); reload(); }}
+          onSigned={() => { setSigning(null); notifyCrmChanged(); setAutoExport(data.signatures.length + 1); reload(); }}
           flightId={id} />
       )}
       {editReport && (
@@ -395,6 +442,13 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
       )}
     </div>
   );
+}
+
+/** Visas encore attendus : commandant de bord, copilote (s'il y en a un), mesures correctives (s'il y a des rapports) */
+function missingVisas(d: { crew: { role: string }[]; reports: unknown[]; signatures: CrmSignature[] }): CrmVisaKind[] {
+  const expected: CrmVisaKind[] = ['pilote', ...(d.crew.some((c) => c.role === 'copilote') ? ['copilote' as const] : []), ...(d.reports.length ? ['rapports' as const] : [])];
+  const signed = new Set(d.signatures.map((s) => s.kind));
+  return expected.filter((k) => !signed.has(k));
 }
 
 const VISA_TEXT: Record<CrmVisaKind, { title: string; text: (n: number) => string }> = {

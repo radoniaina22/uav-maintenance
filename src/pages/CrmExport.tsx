@@ -6,7 +6,7 @@ import { useData } from '../lib/useData';
 import { date, time } from '../lib/format';
 import { addDays, iso } from '../lib/stats';
 import { crmArchivePath, dayRanks } from '../lib/crmArchive';
-import { archiveSupported, archivedOn, elementToPdf, getArchiveRoot, markArchived, rememberedFolder, saveToArchive } from '../lib/localArchive';
+import { archiveSupported, archivedOn, crmDocumentToPdf, getArchiveRoot, markArchived, rememberedFolder, saveToArchive } from '../lib/localArchive';
 import { Badge, Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
 import { Icon } from '../components/icons';
 import FlightCrm, { CrmReadyInfo } from './FlightCrm';
@@ -111,7 +111,7 @@ export default function CrmExport() {
           droneCode: r.drone_code, flightDate: r.flight_date, takeoff: r.takeoff_time, destination: r.destination_name,
           flightType: r.flight_type, rank: data.ranks.get(r.id) ?? 1, crmNo: info.crmNo, closed: info.closed,
         });
-        const blob = await elementToPdf(el);
+        const blob = await crmDocumentToPdf(el); // CRM + rapport WindPath s'il existe
         const res = await saveToArchive(segments, fileName, blob, false, root);
         markArchived(r.id);
         state.ok++; state.lastPath = res.path;

@@ -192,6 +192,8 @@
         : finite(estVoltEnd) ? { value: round(estVoltEnd, 2), source: 'estime' } : null,
       departureVoltage: Number.isFinite(departureVoltage) ? departureVoltage : null,
       payloadKg: Number.isFinite(payloadKg) ? payloadKg : null,
+      // mission complète (rapport WindPath joint au CRM)
+      record: missionRecord(),
       // estimation seule (jamais les valeurs réelles), conservée avec le vol pour la comparaison prévu / réel
       estimate: {
         planId,
@@ -215,6 +217,68 @@
       },
     };
   }
+
+  /**
+   * Mission complète conservée avec le vol (rapport WindPath joint au CRM) : points, estimations,
+   * relevés réels et valeurs appliquées automatiquement (marquées `auto`), vent, phases.
+   * Heures en millisecondes (epoch), valeurs arrondies pour rester compact.
+   */
+  function missionRecord() {
+    const wps = state.waypoints || [];
+    if (!wps.length) return null;
+    const r = (v, d = 0) => (finite(v) ? Math.round(v * 10 ** d) / 10 ** d : null);
+    const s = summary();
+    const points = wps.map((w, i) => {
+      let phases = [];
+      try { phases = typeof waypointPhaseLabels === 'function' ? waypointPhaseLabels(w, i) : []; } catch { /* phases inconnues */ }
+      const auto = w.uavAuto || {};
+      return {
+        n: String(typeof waypointNumber === 'function' ? waypointNumber(w, i) : i),
+        name: w.name || null,
+        lat: r(w.lat, 6), lon: r(w.lon, 6), alt: r(w.altitude),
+        phases, drop: typeof hasDropPoint === 'function' ? hasDropPoint(w) : false,
+        eta: r(w.etaTimestamp), pass: r(w.actualPassedAt), passAuto: auto.pass != null && auto.pass === w.actualPassedAt,
+        windMs: w.wind ? r(w.wind.speed, 1) : null, windDir: w.wind ? r(w.wind.direction) : null, gust: r(w.gust, 1),
+        groundSpeed: r(w.groundSpeed, 1), currentA: r(w.estimatedCurrentA, 1),
+        estLegMah: r(w.estimatedUsedMah), estCumMah: r(w.cumulativeEstimatedMah),
+        realCumMah: r(w.actualCumulativeMah), mahAuto: auto.mah != null && auto.mah === w.actualCumulativeMah,
+        estV: r(w.estimatedVoltage, 2), realV: r(w.actualVoltage, 2), vAuto: auto.v != null && auto.v === w.actualVoltage,
+      };
+    });
+    const d = planDelay();
+    return {
+      v: 1,
+      capturedAt: Date.now(),
+      missionName: state.missionName || null,
+      planId,
+      takeoffPlanned: elements.takeoffTime.value || null,
+      capacityMah: r(Number(elements.batteryCapacity.value)),
+      departureVoltage: r(Number(elements.departureVoltage.value), 2),
+      payloadKg: r(Number(elements.payloadWeight.value), 2),
+      cruiseSpeedMs: r(Number(elements.defaultCruiseSpeed.value), 1),
+      reservePct: Math.round(RESERVE * 100),
+      windCheckedAt: r(state.lastWindCheckAt),
+      summary: {
+        distanceKm: s.distanceKm, estimatedMah: s.estimatedMah, finalVoltage: s.finalVoltage, marginPct: s.marginPct,
+        durationMin: s.durationMin, maxWindMs: s.maxWindMs, maxGustMs: s.maxGustMs, delayS: d ? Math.round(d.ms / 1000) : null,
+      },
+      points,
+    };
+  }
+
+  // -------------------------------------------------------------------
+  // Impression : même feuille A4 que le CRM (rapport de vol WindPath), imprimée par la page.
+  // Le bouton « Print / Save PDF » et Ctrl+P ne lancent plus l'impression propre à WindPath.
+  // -------------------------------------------------------------------
+  function printReport() {
+    const record = missionRecord();
+    post({ type: 'print', record, error: record ? null : 'Aucune mission à imprimer : importez un plan ou ajoutez des points.' });
+  }
+  elements.printButton.addEventListener('click', (e) => { e.preventDefault(); e.stopImmediatePropagation(); printReport(); }, true);
+  elements.printButton.title = 'Imprimer ou enregistrer en PDF le rapport de vol (même format que le CRM)';
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopImmediatePropagation(); printReport(); }
+  }, true);
 
   // -------------------------------------------------------------------
   // Bibliothèque de plans : chargement et export
@@ -2316,6 +2380,8 @@
     const key = p ? p.status : 'none';
     // toutes les 5 s, ou tout de suite quand l'état change (décollage, arrivée, mission effacée)
     if (liveCountdown > 0 && key === lastLiveKey) return;
+    // atterrissage : la page propose de reporter la mission dans le vol (rapport joint au CRM)
+    if (key === 'arrive' && lastLiveKey === 'vol') post({ type: 'landed' });
     liveCountdown = 5;
     lastLiveKey = key;
     post({ type: 'live', data: p });

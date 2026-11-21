@@ -127,22 +127,40 @@ export async function elementToCanvas(el: HTMLElement): Promise<HTMLCanvasElemen
  * Les sauts de page tombent entre deux blocs (`blocks`) pour ne pas couper une section en deux.
  */
 export async function elementToPdf(el: HTMLElement, blocks = '.crm-box, .crm-head, .crm-foot, tr'): Promise<Blob> {
+  return elementsToPdf([el], blocks);
+}
+
+/**
+ * Plusieurs feuilles dans un seul PDF A4 : chaque élément commence sur une nouvelle page
+ * (ex. CRM puis rapport de vol WindPath).
+ */
+export async function elementsToPdf(els: HTMLElement[], blocks = '.crm-box, .crm-head, .crm-foot, tr'): Promise<Blob> {
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+  let first = true;
+  for (const el of els) {
+    await addElementPages(pdf, el, blocks, first);
+    first = false;
+  }
+  return pdf.output('blob');
+}
+
+async function addElementPages(pdf: import('jspdf').jsPDF, el: HTMLElement, blocks: string, firstPage: boolean) {
   // limites basses des blocs, en px CSS depuis le haut de l'élément (mesurées dans l'aspect « papier »)
   el.classList.add('pdf-capture');
   const top = el.getBoundingClientRect().top;
   const cssW = el.offsetWidth;
   const bottoms = Array.from(el.querySelectorAll<HTMLElement>(blocks)).map((b) => b.getBoundingClientRect().bottom - top).sort((a, b) => a - b);
   el.classList.remove('pdf-capture');
-  const [canvas, { jsPDF }] = await Promise.all([elementToCanvas(el), import('jspdf')]);
+  const canvas = await elementToCanvas(el);
   {
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
     const pageW = 210, pageH = 297, margin = 8;
     const w = pageW - margin * 2;
     const pxPerMm = canvas.width / w;
     const pagePx = Math.floor((pageH - margin * 2) * pxPerMm);
     const k = canvas.width / cssW; // px du canvas par px CSS
     const cuts = bottoms.map((b) => Math.round(b * k));
-    let y = 0, first = true;
+    let y = 0, first = firstPage;
     while (y < canvas.height) {
       let h = Math.min(pagePx, canvas.height - y);
       if (y + h < canvas.height) {
@@ -157,6 +175,8 @@ export async function elementToPdf(el: HTMLElement, blocks = '.crm-box, .crm-hea
       pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, w, h / pxPerMm);
       y += h; first = false;
     }
-    return pdf.output('blob');
   }
 }
+
+/** Dossier du vol : CRM et, s'il existe, rapport de vol WindPath, dans un seul PDF */
+export const crmDocumentToPdf = (root: HTMLElement) => elementsToPdf(Array.from(root.querySelectorAll<HTMLElement>('.crm-sheet')));
