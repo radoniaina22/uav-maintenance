@@ -66,6 +66,35 @@ test.describe('Vol et CRM', () => {
   });
 });
 
+test.describe('Pilote en formation', () => {
+  test('3e membre facultatif : heures à part dans son carnet, pas de visa CRM', async () => {
+    const nord = await as('nord'), nord2 = await as('nord2');
+    // le pilote en formation doit être différent du pilote
+    await expectError(nord.rpc('save_flight', { p_id: null, p_data: flightData(fx.drones.nord, '09:00', '09:30'), p_pilot_ids: [fx.pilots.nord], p_trainee_id: fx.pilots.nord }));
+    const id = await ok(nord.rpc('save_flight', {
+      p_id: null, p_data: flightData(fx.drones.nord, '09:00', '09:30'), p_pilot_ids: [fx.pilots.nord], p_trainee_id: fx.pilots.nord2,
+    })) as string;
+    const crew = await ok(nord.from('flight_pilots').select('pilot_id, role').eq('flight_id', id).order('role'));
+    expect(crew).toEqual([{ pilot_id: fx.pilots.nord, role: 'pilote' }, { pilot_id: fx.pilots.nord2, role: 'stagiaire' }]);
+    const v = await ok(nord.from('v_flights').select('pilot_names, trainee_name').eq('id', id).single());
+    expect(v).toEqual({ pilot_names: 'E2E Pilote Nord', trainee_name: 'E2E Copilote Nord' });
+    // un seul pilote en formation par vol
+    await expectError(nord.from('flight_pilots').insert({ flight_id: id, pilot_id: fx.pilots.sud, role: 'stagiaire' }));
+
+    const before = await ok(nord2.from('v_pilot_stats').select('total_hours, trainee_hours').eq('id', fx.pilots.nord2).single());
+    await ok(nord.rpc('close_flight', { p_id: id }));
+    const after = await ok(nord2.from('v_pilot_stats').select('total_hours, trainee_hours, trainee_flight_count').eq('id', fx.pilots.nord2).single());
+    expect(Number(after.total_hours)).toBe(Number(before.total_hours)); // hors total
+    expect(Number(after.trainee_hours)).toBeCloseTo(Number(before.trainee_hours) + 0.5, 1);
+    expect(after.trainee_flight_count).toBeGreaterThanOrEqual(1);
+    const entry = await ok(nord2.from('v_logbook').select('role').eq('flight_id', id).single());
+    expect(entry.role).toBe('stagiaire');
+    // pas de visa CRM à signer pour le pilote en formation
+    const tasks = await ok(nord2.rpc('my_crm_tasks')) as { flight_id: string }[];
+    expect(tasks.some((t) => t.flight_id === id)).toBe(false);
+  });
+});
+
 test.describe('Comptes rendus techniques', () => {
   test('la clôture exige une mesure corrective', async () => {
     const nord = await as('nord');

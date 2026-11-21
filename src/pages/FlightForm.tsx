@@ -68,6 +68,8 @@ interface FormState {
   battery_2_id: string;
   pilot_1_id: string;
   pilot_2_id: string;
+  /** pilote en formation (facultatif) */
+  trainee_id: string;
   observation: string;
   qrf: boolean;
   qrf_cause: QrfCause;
@@ -84,8 +86,15 @@ const blank: FormState = {
   drone_id: '', flight_type: 'livraison', organization: 'UNFPA', organization_other: '', distance_km: '', cruise_altitude_m: '',
   voltage_start_v: '', voltage_end_v: '', destination_id: '', flight_date: today(), takeoff_time: '', drop_time: '', landing_time: '',
   payload_kg: '', avg_wind_ms: '', wind_direction_deg: '', consumption_mah: '', battery_pack_id: '', battery_1_id: '', battery_2_id: '',
-  pilot_1_id: '', pilot_2_id: '', observation: '',
+  pilot_1_id: '', pilot_2_id: '', trainee_id: '', observation: '',
 };
+
+/** Équipage d'un vol par rôle : commandant de bord, copilote, pilote en formation */
+const crewOf = (fps: FlightPilot[]) => ({
+  pilot_1_id: fps.find((x) => x.role === 'pilote')?.pilot_id ?? '',
+  pilot_2_id: fps.find((x) => x.role === 'copilote')?.pilot_id ?? '',
+  trainee_id: fps.find((x) => x.role === 'stagiaire')?.pilot_id ?? '',
+});
 
 const nfCell = (v: number | null) => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -149,7 +158,7 @@ export default function FlightForm() {
       ]);
       const flight = unwrap(f) as Flight;
       setClosed(flight.status === 'cloture');
-      const fps = (unwrap(fp) as FlightPilot[]).sort((a, b) => (a.role === 'pilote' ? -1 : 1) - (b.role === 'pilote' ? -1 : 1));
+      const crew = crewOf(unwrap(fp) as FlightPilot[]);
       const v2 = (v: number | null) => (v == null ? '' : String(v).replace('.', ','));
       setForm({
         drone_id: flight.drone_id, destination_id: flight.destination_id ?? '', flight_date: flight.flight_date,
@@ -161,7 +170,7 @@ export default function FlightForm() {
         avg_wind_ms: flight.avg_wind_ms?.toString() ?? '', wind_direction_deg: flight.wind_direction_deg?.toString() ?? '',
         consumption_mah: flight.consumption_mah?.toString() ?? '', battery_pack_id: flight.battery_pack_id ?? '',
         battery_1_id: flight.battery_1_id ?? '', battery_2_id: flight.battery_2_id ?? '',
-        pilot_1_id: fps[0]?.pilot_id ?? '', pilot_2_id: fps[1]?.pilot_id ?? '', observation: flight.observation ?? '',
+        ...crew, observation: flight.observation ?? '',
         qrf: flight.qrf, qrf_cause: flight.qrf_cause ?? 'meteo', qrf_conditions: flight.qrf_conditions ?? [],
         qrf_time: flight.qrf_time?.slice(0, 5) ?? '', qrf_details: flight.qrf_details ?? '',
         retry_of_flight_id: flight.retry_of_flight_id ?? '',
@@ -175,14 +184,14 @@ export default function FlightForm() {
         supabase.from('flight_pilots').select('*').eq('flight_id', retryId),
       ]);
       const src = unwrap(f) as Flight;
-      const fps = (unwrap(fp) as FlightPilot[]).sort((a, b) => (a.role === 'pilote' ? -1 : 1) - (b.role === 'pilote' ? -1 : 1));
+      const crew = crewOf(unwrap(fp) as FlightPilot[]);
       setForm({
         ...blank,
         drone_id: src.drone_id, flight_type: src.flight_type, organization: src.organization,
         organization_other: src.organization_other ?? '', destination_id: src.destination_id ?? '',
         distance_km: src.distance_km?.toString() ?? '', payload_kg: src.payload_kg?.toString() ?? '',
         cruise_altitude_m: src.cruise_altitude_m?.toString() ?? '',
-        flight_date: today(), pilot_1_id: fps[0]?.pilot_id ?? '', pilot_2_id: fps[1]?.pilot_id ?? '',
+        flight_date: today(), ...crew,
         retry_of_flight_id: src.id,
       });
       return { ...result, retryOf: src };
@@ -294,6 +303,9 @@ export default function FlightForm() {
     if (!form) return;
     setError(null);
     if (form.pilot_2_id && form.pilot_2_id === form.pilot_1_id) return setError('Les deux pilotes doivent être différents.');
+    if (form.trainee_id && (form.trainee_id === form.pilot_1_id || form.trainee_id === form.pilot_2_id)) {
+      return setError('Le pilote en formation doit être différent du pilote et du copilote.');
+    }
     if (form.battery_1_id && form.battery_1_id === form.battery_2_id) return setError('Les deux batteries doivent être différentes.');
     if (form.flight_type === 'livraison' && !form.destination_id) return setError('Une livraison doit avoir un CSB de destination.');
     if (form.organization === 'AUTRE' && !form.organization_other.trim()) return setError("Précisez l'organisation (« Autres »).");
@@ -332,7 +344,10 @@ export default function FlightForm() {
         observation: toStr(form.observation),
       };
       const pilots = [form.pilot_1_id, form.pilot_2_id].filter(Boolean);
-      const flightId = unwrap(await supabase.rpc('save_flight', { p_id: id ?? null, p_data: payload, p_pilot_ids: pilots })) as string;
+      // p_trainee_id envoyé seulement s'il est renseigné (paramètre facultatif de save_flight)
+      const flightId = unwrap(await supabase.rpc('save_flight', {
+        p_id: id ?? null, p_data: payload, p_pilot_ids: pilots, ...(form.trainee_id ? { p_trainee_id: form.trainee_id } : {}),
+      })) as string;
       const toInsert = reports.map((r) => ({ ...draftToPayload(r), flight_id: flightId }));
       // QRF technique : rapport technique ouvert, pré-rempli, pour suivre la mesure corrective
       const techConds = form.qrf ? form.qrf_conditions.filter(isTechCondition) : [];
@@ -382,7 +397,7 @@ export default function FlightForm() {
 
   // listes : éléments actifs + élément déjà sélectionné (en édition)
   const facilityOpts = facilities.filter((f) => ((f.active && (!f.drone_port_id || inScope(f.drone_port_id))) || f.id === form.destination_id));
-  const pilotOpts = pilots.filter((p) => (p.active && inScope(p.drone_port_id)) || p.id === form.pilot_1_id || p.id === form.pilot_2_id);
+  const pilotOpts = pilots.filter((p) => (p.active && inScope(p.drone_port_id)) || p.id === form.pilot_1_id || p.id === form.pilot_2_id || p.id === form.trainee_id);
   const packOpts = packs.filter((p) => (p.status === 'en_service' && inScope(p.drone_port_id)) || p.id === form.battery_pack_id);
   const droneOpts = drones.filter((d) => d.status !== 'retire' || d.id === form.drone_id);
 
@@ -451,6 +466,7 @@ export default function FlightForm() {
           <div><dt>Date</dt><dd>{form.flight_date ? date(form.flight_date) : '—'}</dd></div>
           <div><dt>Pilote</dt><dd>{pilotName(form.pilot_1_id) ?? '—'}</dd></div>
           <div><dt>Copilote</dt><dd>{pilotName(form.pilot_2_id) ?? '—'}</dd></div>
+          {form.trainee_id && <div><dt>En formation</dt><dd>{pilotName(form.trainee_id) ?? '—'}</dd></div>}
         </dl>
         <ol className="ff-timeline">
           <li className={form.takeoff_time ? 'on' : ''}><span>Décollage</span><strong>{form.takeoff_time || '--:--'}</strong></li>
@@ -562,6 +578,7 @@ export default function FlightForm() {
                 drone_id: e.target.value,
                 pilot_1_id: keep(pilots.find((p) => p.id === form.pilot_1_id)?.drone_port_id) ? form.pilot_1_id : '',
                 pilot_2_id: keep(pilots.find((p) => p.id === form.pilot_2_id)?.drone_port_id) ? form.pilot_2_id : '',
+                trainee_id: keep(pilots.find((p) => p.id === form.trainee_id)?.drone_port_id) ? form.trainee_id : '',
                 battery_pack_id: keepPack ? form.battery_pack_id : '',
                 battery_1_id: keepPack ? form.battery_1_id : '',
                 battery_2_id: keepPack ? form.battery_2_id : '',
@@ -601,10 +618,16 @@ export default function FlightForm() {
               {pilotOpts.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
             </select>
           </Field>
-          <Field label="Second pilote" hint="Optionnel – 2 pilotes maximum par vol">
+          <Field label="Second pilote" hint="Optionnel : copilote">
             <select value={form.pilot_2_id} onChange={(e) => set('pilot_2_id', e.target.value)}>
               <option value="">— Aucun —</option>
-              {pilotOpts.filter((p) => p.id !== form.pilot_1_id).map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              {pilotOpts.filter((p) => p.id !== form.pilot_1_id && p.id !== form.trainee_id).map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            </select>
+          </Field>
+          <Field label="Pilote en formation" hint="Optionnel : session d'apprentissage. Heures inscrites à part dans son carnet, pas de visa CRM">
+            <select value={form.trainee_id} onChange={(e) => set('trainee_id', e.target.value)}>
+              <option value="">— Aucun —</option>
+              {pilotOpts.filter((p) => p.id !== form.pilot_1_id && p.id !== form.pilot_2_id).map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
             </select>
           </Field>
         </div>

@@ -240,7 +240,10 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
           ]} />
           <div className="crm-crew">
             <span className="crm-label">Équipage</span>
-            <span>{pilots.length ? pilots.map((p, i) => <span key={p}>{i ? ' · ' : ''}{p} <em>({i ? 'copilote' : 'pilote'})</em></span>) : '—'}</span>
+            <span>
+              {pilots.length ? pilots.map((p, i) => <span key={p}>{i ? ' · ' : ''}{p} <em>({i ? 'copilote' : 'pilote'})</em></span>) : '—'}
+              {f.trainee_name && <span> · {f.trainee_name} <em>(pilote en formation)</em></span>}
+            </span>
           </div>
           {f.qrf && (
             <div className="crm-qrf">

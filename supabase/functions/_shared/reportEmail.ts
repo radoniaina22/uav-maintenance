@@ -148,6 +148,7 @@ function pilotsEmail(i: EmailInput): EmailOutput {
   const flights = (r.flights ?? []).map((f: Json) => ({
     Date: f.flight_date, Décollage: f.takeoff_time?.slice(0, 5), Atterrissage: f.landing_time?.slice(0, 5), 'Durée (min)': Number(f.minutes),
     Drone: f.drone_code, Destination: f.destination_name, Type: f.qrf ? `QRF ${f.qrf_cause ?? ''}` : f.flight_type, Équipage: f.pilot_names,
+    'Pilote en formation': f.trainee_name ?? null,
     Pack: f.pack_number, 'Charge (kg)': f.payload_kg == null ? null : Number(f.payload_kg), 'Conso. (mAh)': f.consumption_mah, Rapports: f.reports, Statut: f.status,
   }));
   return {

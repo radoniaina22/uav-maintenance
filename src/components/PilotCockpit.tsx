@@ -180,7 +180,7 @@ function Ticket({ e, port }: { e: LogbookRow; port: string }) {
         <div className="ticket-meta">
           <span><Icon name="drone" size={12} /> {e.drone_code ?? '—'}</span>
           <Badge level={e.flight_type === 'controle' ? 'neutral' : 'info'}>{LABELS.flightType[e.flight_type]}</Badge>
-          <Badge level={e.role === 'pilote' ? 'ok' : 'neutral'}>{e.role === 'pilote' ? 'Commandant de bord' : 'Copilote'}</Badge>
+          <Badge level={e.role === 'pilote' ? 'ok' : e.role === 'stagiaire' ? 'info' : 'neutral'}>{e.role === 'pilote' ? 'Commandant de bord' : LABELS.crewRole[e.role]}</Badge>
         </div>
       </div>
       <div className="ticket-cumul"><span>cumul</span><strong>{num(e.cumulative_hours, 1)}</strong><span>heures</span></div>
@@ -200,7 +200,8 @@ export default function PilotCockpit({ pilot: p, all, entries, year, years, setY
   const g = grade(career);
 
   const k = useMemo(() => {
-    const flown = entries.reduce((s, e) => s + Number(e.duration_min), 0);
+    // temps de vol qualifiant : les heures en formation sont comptées à part
+    const flown = entries.filter((e) => e.role !== 'stagiaire').reduce((s, e) => s + Number(e.duration_min), 0);
     const pic = entries.filter((e) => e.role === 'pilote').reduce((s, e) => s + Number(e.duration_min), 0);
     const longest = entries.reduce((m, e) => Math.max(m, Number(e.duration_min)), 0);
     const st = streaks(all.map((e) => e.entry_date));
@@ -237,7 +238,8 @@ export default function PilotCockpit({ pilot: p, all, entries, year, years, setY
   ];
 
   const shown = entries.slice(0, limit);
-  const periodMin = entries.reduce((s, e) => s + Number(e.duration_min), 0);
+  const periodMin = k.flown; // hors heures en formation
+  const trainMin = entries.filter((e) => e.role === 'stagiaire').reduce((s, e) => s + Number(e.duration_min), 0);
 
   return (
     <div className="cockpit">
@@ -270,6 +272,7 @@ export default function PilotCockpit({ pilot: p, all, entries, year, years, setY
           <div className="license-split">
             <span><i className="dot-pic" /> CdB {num(p.pic_hours)} h</span>
             <span><i className="dot-cop" /> Copilote {num(p.copilot_hours)} h</span>
+            {Number(p.trainee_hours) > 0 && <span title="Heures en tant que pilote en formation, hors total"><i className="dot-prev" /> En formation {num(p.trainee_hours)} h</span>}
             {Number(p.initial_flight_minutes) > 0 && <span><i className="dot-prev" /> Antérieures {num(Number(p.initial_flight_minutes) / 60)} h</span>}
           </div>
         </div>
@@ -312,7 +315,7 @@ export default function PilotCockpit({ pilot: p, all, entries, year, years, setY
         <div className="row-between">
           <div>
             <h2 className="card-title">Journal de bord</h2>
-            <span className="small muted">{entries.length} vol(s) · {minutes(periodMin)}{year ? ` en ${year}` : ''}</span>
+            <span className="small muted">{entries.length} vol(s) · {minutes(periodMin)}{trainMin ? ` + ${minutes(trainMin)} en formation` : ''}{year ? ` en ${year}` : ''}</span>
           </div>
           <div className="segmented segmented-sm" role="tablist" aria-label="Présentation">
             <button type="button" role="tab" aria-selected={view === 'cartes'} className={view === 'cartes' ? 'active' : ''} onClick={() => setView('cartes')}>Cartes d'embarquement</button>

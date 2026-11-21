@@ -47,7 +47,7 @@ export default function FlightDetail() {
     if (!data) return;
     const f = data.flight;
     // eslint-disable-next-line no-restricted-globals
-    if (!confirm(`Clôturer ce vol ?\n\n${minutes(f.duration_min)} seront ajoutées au carnet de vol de : ${f.pilot_names ?? '—'}.\nLe vol ne sera plus modifiable (les rapports techniques restent modifiables).`)) return;
+    if (!confirm(`Clôturer ce vol ?\n\n${minutes(f.duration_min)} seront ajoutées au carnet de vol de : ${f.pilot_names ?? '—'}${f.trainee_name ? `\net, en heures de formation, de : ${f.trainee_name}` : ''}.\nLe vol ne sera plus modifiable (les rapports techniques restent modifiables).`)) return;
     try {
       unwrap(await supabase.rpc('close_flight', { p_id: id }));
       notifyCrmChanged();
@@ -178,6 +178,7 @@ export default function FlightDetail() {
                 <span className="muted small"> (CSB : {km(f.destination_distance_km)})</span>}
             </dd>
             <dt>Pilote(s)</dt><dd>{f.pilot_names ?? '—'}</dd>
+            {f.trainee_name && <><dt>En formation</dt><dd>{f.trainee_name} <span className="muted small">(heures à part, sans visa CRM)</span></dd></>}
             <dt>Date</dt><dd>{date(f.flight_date)}</dd>
             <dt>Décollage</dt><dd>{time(f.takeoff_time)}</dd>
             <dt>Largage</dt><dd>{f.qrf ? <span className="text-danger">Non effectué (QRF)</span> : time(f.drop_time)}{f.time_to_drop_min != null && <span className="muted"> (T+{minutes(f.time_to_drop_min)})</span>}</dd>

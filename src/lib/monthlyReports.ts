@@ -74,14 +74,18 @@ export interface Qrf {
   list: { flight_id: string; flight_date: string; drone_code: string; destination_name: string | null; cause: string; conditions: string[]; details: string | null }[];
 }
 
-export interface PilotRow { id: string; full_name: string; drone_port_name: string | null; active: boolean; flights: number; minutes: number; pic_minutes: number; has_account: boolean }
+export interface PilotRow {
+  id: string; full_name: string; drone_port_name: string | null; active: boolean; flights: number; minutes: number; pic_minutes: number;
+  /** vols / minutes en tant que pilote en formation (hors heures) */
+  trainee_flights?: number; trainee_minutes?: number; has_account: boolean;
+}
 
 export interface FlightRow {
   flight_id: string; flight_date: string; takeoff_time: string; landing_time: string; minutes: number;
   drone_code: string; drone_port_name: string | null; destination_name: string | null;
   flight_type: 'livraison' | 'controle'; qrf: boolean; qrf_cause: string | null;
   payload_kg: number | null; distance_km: number | null; consumption_mah: number | null;
-  pack_number: number | null; status: 'ouvert' | 'cloture'; pilot_names: string | null; reports: number;
+  pack_number: number | null; status: 'ouvert' | 'cloture'; pilot_names: string | null; trainee_name?: string | null; reports: number;
 }
 
 export interface TechReport {

@@ -49,7 +49,7 @@ export const LABELS = {
     largage: 'Système de largage', autre: 'Autre',
   },
   role: { admin: 'Administrateur', pilote: 'Pilote' },
-  crewRole: { pilote: 'Pilote', copilote: 'Copilote' },
+  crewRole: { pilote: 'Pilote', copilote: 'Copilote', stagiaire: 'Pilote en formation' },
 } as const;
 
 /** Seuils d'alerte */

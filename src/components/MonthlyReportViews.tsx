@@ -329,6 +329,9 @@ function PilotsSection({ rows, showPort }: { rows: PilotRow[]; showPort?: boolea
         { head: 'Vols', cell: (p) => num(p.flights, 0), num: true },
         { head: 'Heures', cell: (p) => minutes(p.minutes), num: true },
         { head: 'dont commandant de bord', cell: (p) => minutes(p.pic_minutes), num: true },
+        ...(rows.some((p) => Number(p.trainee_flights ?? 0) > 0)
+          ? [{ head: 'En formation (hors heures)', cell: (p: PilotRow) => (Number(p.trainee_flights ?? 0) > 0 ? `${p.trainee_flights} vol(s) · ${minutes(p.trainee_minutes)}` : '—'), num: true }]
+          : []),
       ]} />
     </Section>
   );
@@ -348,7 +351,7 @@ function FlightsSection({ rows, showPort }: { rows: FlightRow[]; showPort?: bool
         { head: 'Type', cell: (f) => (f.qrf
           ? <Tag level="warn">QRF{f.qrf_cause ? ` ${LABELS.qrfCause[f.qrf_cause as keyof typeof LABELS.qrfCause]?.toLowerCase() ?? ''}` : ''}</Tag>
           : f.flight_type === 'controle' ? 'Contrôle' : 'Livraison') },
-        { head: 'Équipage', cell: (f) => f.pilot_names ?? '—' },
+        { head: 'Équipage', cell: (f) => <>{f.pilot_names ?? '—'}{f.trainee_name && <span className="mr-note"> + {f.trainee_name} (formation)</span>}</> },
         { head: 'Pack', cell: (f) => f.pack_number ?? '—', num: true },
         { head: 'Charge', cell: (f) => kg(f.payload_kg), num: true },
         { head: 'Conso.', cell: (f) => (f.consumption_mah == null ? '—' : `${num(f.consumption_mah, 0)} mAh`), num: true },

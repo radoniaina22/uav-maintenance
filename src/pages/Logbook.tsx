@@ -73,9 +73,12 @@ function LogbookPrint({ pilot: p, entries, year }: { pilot: PilotStatsRow; entri
   const rows = [...entries].reverse();
   const first = rows[0];
   const carried = first ? Number(first.cumulative_hours) - Number(first.duration_min) / 60 : null;
-  const periodMin = rows.reduce((s, e) => s + Number(e.duration_min), 0);
-  const picMin = rows.filter((e) => e.role === 'pilote').reduce((s, e) => s + Number(e.duration_min), 0);
-  const copMin = periodMin - picMin;
+  // heures qualifiantes (commandant de bord + copilote) ; les heures en formation sont comptées à part
+  const sumOf = (role?: string) => rows.filter((e) => (role ? e.role === role : e.role !== 'stagiaire')).reduce((s, e) => s + Number(e.duration_min), 0);
+  const periodMin = sumOf();
+  const picMin = sumOf('pilote');
+  const copMin = sumOf('copilote');
+  const trainMin = sumOf('stagiaire');
   const deliveries = rows.filter((e) => e.flight_type === 'livraison').length;
   const now = new Date();
   const period = year ? `Année ${year}` : rows.length ? `Du ${date(rows[0].entry_date)} au ${date(rows[rows.length - 1].entry_date)}` : 'Aucun vol';
@@ -111,6 +114,7 @@ function LogbookPrint({ pilot: p, entries, year }: { pilot: PilotStatsRow; entri
         <div><span>Heures de la période</span><strong>{hm(periodMin)}</strong></div>
         <div><span>Commandant de bord</span><strong>{hm(picMin)}</strong></div>
         <div><span>Copilote</span><strong>{hm(copMin)}</strong></div>
+        {trainMin > 0 && <div><span>En formation (hors total)</span><strong>{hm(trainMin)}</strong></div>}
         <div><span>Vols · livraisons</span><strong>{rows.length} · {deliveries}</strong></div>
       </section>
 
@@ -135,7 +139,7 @@ function LogbookPrint({ pilot: p, entries, year }: { pilot: PilotStatsRow; entri
               <td className="c">{time(e.takeoff_time)}</td>
               <td className="c">{time(e.landing_time)}</td>
               <td className="r nowrap">{minutes(e.duration_min)}</td>
-              <td className="c">{e.role === 'pilote' ? 'CdB' : 'COP'}</td>
+              <td className="c">{e.role === 'pilote' ? 'CdB' : e.role === 'copilote' ? 'COP' : 'FORM'}</td>
               <td className="r nowrap"><strong>{num(e.cumulative_hours, 1)} h</strong></td>
             </tr>
           ))}
@@ -150,7 +154,7 @@ function LogbookPrint({ pilot: p, entries, year }: { pilot: PilotStatsRow; entri
           </tr>
         </tfoot>
       </table>
-      <p className="lb-legend">CdB : commandant de bord · COP : copilote · Heures inscrites à la clôture de chaque vol dans UAV Maintenance.</p>
+      <p className="lb-legend">CdB : commandant de bord · COP : copilote · FORM : pilote en formation (heures hors total et hors cumul) · Heures inscrites à la clôture de chaque vol dans UAV Maintenance.</p>
 
       <section className="lb-sign">
         <div>

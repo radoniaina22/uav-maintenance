@@ -161,11 +161,14 @@ export interface SignupInfo {
   message?: string | null;
 }
 
+/** pilote : commandant de bord ; copilote ; stagiaire : pilote en formation (facultatif, heures comptées à part) */
+export type CrewRole = 'pilote' | 'copilote' | 'stagiaire';
+
 export interface LogbookRow {
   id: string;
   pilot_id: string;
   flight_id: string;
-  role: 'pilote' | 'copilote';
+  role: CrewRole;
   entry_date: string;
   takeoff_time: string;
   landing_time: string;
@@ -300,6 +303,9 @@ export interface PilotStatsRow extends Pilot {
   last_flight_date: string | null;
   open_flight_count: number;
   has_account: boolean;
+  /** heures et vols en tant que pilote en formation (hors total) */
+  trainee_hours: number;
+  trainee_flight_count: number;
 }
 
 export interface HealthFacility {
@@ -379,7 +385,10 @@ export interface FlightRow extends Flight {
   battery_1_serial: string | null;
   battery_2_serial: string | null;
   pack_capacity_mah: number;
+  /** commandant de bord puis copilote */
   pilot_names: string | null;
+  /** pilote en formation (facultatif) */
+  trainee_name: string | null;
   report_count: number;
   open_report_count: number;
 }
@@ -387,7 +396,7 @@ export interface FlightRow extends Flight {
 export interface FlightPilot {
   flight_id: string;
   pilot_id: string;
-  role: 'pilote' | 'copilote';
+  role: CrewRole;
 }
 
 export interface TechnicalReport {

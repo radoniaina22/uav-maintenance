@@ -271,7 +271,7 @@ export default function Pilots() {
 
                 <div className="crew-split" title={`Commandant de bord ${hours(pic)} · copilote ${hours(cop)}`}>
                   <span className="crew-split-bar"><i style={{ width: `${picPct}%` }} /></span>
-                  <span className="small muted">CdB {hours(pic)} · copilote {hours(cop)}</span>
+                  <span className="small muted">CdB {hours(pic)} · copilote {hours(cop)}{Number(p.trainee_hours) > 0 ? ` · en formation ${hours(Number(p.trainee_hours))}` : ''}</span>
                 </div>
 
                 <div className="crew-spark" aria-label={`Heures par semaine sur ${WEEKS} semaines`}>
