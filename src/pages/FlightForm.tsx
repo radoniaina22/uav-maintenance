@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { FlightNavState, PlanningNavState } from '../lib/windpath';
+import { estimateRow, FlightNavState, PlanEstimate, PlanningNavState } from '../lib/windpath';
 import { supabase, unwrap } from '../lib/supabase';
 import { useData } from '../lib/useData';
 import { byPort, useApp } from '../lib/app';
@@ -206,10 +206,12 @@ export default function FlightForm() {
   const loc = useLocation();
   const navState = (loc.state ?? null) as FlightNavState | null;
   const [wpApplied, setWpApplied] = useState<string[] | null>(null);
+  const [wpEstimate, setWpEstimate] = useState<PlanEstimate | null>(null);
   const appliedRef = useRef(false);
   useEffect(() => {
     if (!refs.data || appliedRef.current || !navState || (!navState.draft && !navState.windpath)) return;
     appliedRef.current = true;
+    if (navState.estimate) setWpEstimate(navState.estimate);
     setForm((s) => {
       const base = (navState.draft as FormState | undefined) ?? s;
       return base ? { ...base, ...(navState.windpath ?? {}) } : s;
@@ -226,11 +228,20 @@ export default function FlightForm() {
       .map((bid) => refs.data!.batteries.find((b) => b.id === bid))
       .filter((b): b is BatteryStatusRow => Boolean(b));
     const capacityMah = bats.length ? bats.reduce((s, b) => s + Number(b.last_measured_mah ?? b.capacity_mah), 0) : null;
+    const drone = refs.data.drones.find((d) => d.id === form.drone_id);
+    const port = ports.find((p) => p.id === (drone?.drone_port_id ?? portFilter));
     const state: PlanningNavState = {
-      prefill: { payloadKg: toNum(form.payload_kg), capacityMah, departureVoltage: toNum(form.voltage_start_v) },
+      prefill: {
+        payloadKg: toNum(form.payload_kg), capacityMah, departureVoltage: toNum(form.voltage_start_v),
+        takeoff: form.flight_date && form.takeoff_time ? `${form.flight_date}T${form.takeoff_time.slice(0, 5)}` : null,
+        center: port?.latitude != null && port.longitude != null ? [Number(port.latitude), Number(port.longitude)] : null,
+      },
       returnTo: loc.pathname + loc.search,
       draft: form,
       context: editing ? 'modification du vol' : 'nouveau vol',
+      destinationId: form.destination_id || null,
+      portId: port?.id ?? null,
+      droneId: form.drone_id || null,
     };
     nav('/planification', { state });
   }
@@ -367,6 +378,11 @@ export default function FlightForm() {
       }
       if (toInsert.length) {
         unwrap(await supabase.from('technical_reports').insert(toInsert));
+      }
+      if (wpEstimate) {
+        // non bloquant : le vol est enregistré même si l'estimation ne peut pas l'être
+        const { error: estErr } = await supabase.from('flight_plan_estimates').upsert(estimateRow(flightId, wpEstimate));
+        if (estErr) console.warn('Estimation WindPath non enregistrée :', estErr.message);
       }
       nav(`/vols/${flightId}`);
     } catch (err) {
@@ -522,6 +538,7 @@ export default function FlightForm() {
       {wpApplied && (
         <div className="alert alert-info">
           ≋ Valeurs reprises de WindPath : {wpApplied.join(' · ')}. Vérifiez-les avant d'enregistrer.
+          {wpEstimate && <> L'estimation WindPath ({wpEstimate.consumptionMah != null ? `${wpEstimate.consumptionMah.toLocaleString('fr-FR')} mAh` : 'sans consommation'}) sera enregistrée avec le vol pour la comparaison prévu / réel.</>}
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setWpApplied(null)} style={{ marginLeft: 8 }}>OK</button>
         </div>
       )}

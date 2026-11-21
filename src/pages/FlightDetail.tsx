@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase, unwrap } from '../lib/supabase';
 import { useData } from '../lib/useData';
-import type { FlightRow, TechnicalReport } from '../lib/types';
+import type { FlightPlanEstimate, FlightRow, TechnicalReport } from '../lib/types';
+import PlanVsActual from '../components/PlanVsActual';
 import {
   cardinal, cellLevel, cellText, cellVolts, date, isTechCondition, isWeatherCondition, km, LABELS, minutes, num, orgText, time, volts,
 } from '../lib/format';
@@ -21,16 +22,18 @@ export default function FlightDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const { data, error: loadError, loading, reload } = useData(async () => {
-    const [f, r, retries] = await Promise.all([
+    const [f, r, retries, est] = await Promise.all([
       supabase.from('v_flights').select('*').eq('id', id).single(),
       supabase.from('technical_reports').select('*').eq('flight_id', id).order('created_at'),
       supabase.from('v_flights').select('id, flight_date, takeoff_time, status, qrf').eq('retry_of_flight_id', id).order('flight_date').order('takeoff_time'),
+      supabase.from('flight_plan_estimates').select('*').eq('flight_id', id).maybeSingle(),
     ]);
     const flight = unwrap(f) as FlightRow;
     const parent = flight.retry_of_flight_id
       ? ((await supabase.from('v_flights').select('id, flight_date, takeoff_time, qrf').eq('id', flight.retry_of_flight_id).maybeSingle()).data as RelatedFlight | null)
       : null;
-    return { flight, reports: unwrap(r) as TechnicalReport[], retries: unwrap(retries) as RelatedFlight[], parent };
+    // estimation WindPath : facultative (absente des vols planifiés hors WindPath)
+    return { flight, reports: unwrap(r) as TechnicalReport[], retries: unwrap(retries) as RelatedFlight[], parent, estimate: (est.data ?? null) as FlightPlanEstimate | null };
   }, [id]);
 
   async function deleteFlight() {
@@ -224,6 +227,8 @@ export default function FlightDetail() {
           </dl>
         </section>
       </div>
+
+      {data.estimate && <PlanVsActual estimate={data.estimate} flight={f} />}
 
       <section className="card">
         <h2 className="card-title">Observation</h2>

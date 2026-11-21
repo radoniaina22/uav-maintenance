@@ -337,3 +337,39 @@ test.describe('Batteries', () => {
     await expectError(admin.from('batteries').insert({ drone_port_id: fx.ports.nord, capacity_mah: 30000, status: 'stock', serial_number: 'E2E-SN-001' }));
   });
 });
+
+test.describe('Vols en cours partagés (trafic)', () => {
+  const live = (drone: string, port: string) => ({
+    drone_id: drone, drone_port_id: port, status: 'vol', lat: -18.85, lon: 47.62, altitude_m: 150, heading_deg: 51,
+    ground_speed_ms: 19.4, phase: 'croisière', next_label: 'pt 3', delay_s: 0, drone_code: 'FAUX', pilot_name: 'Usurpateur',
+    route: [[-18.91, 47.53, 0], [-18.78, 47.71, 150]], drop_index: 1,
+  });
+
+  test('un pilote partage son vol : visible par son drone port, pas par les autres', async () => {
+    const nord = await as('nord'), nord2 = await as('nord2'), sud = await as('sud'), admin = await as('admin');
+    const me = (await nord.auth.getUser()).data.user!.id;
+    const row = await ok(nord.from('live_flights').upsert(live(fx.drones.nord, fx.ports.nord), { onConflict: 'user_id' })
+      .select('user_id, drone_code, pilot_name').single());
+    // code du drone et nom du pilote imposés par la base
+    expect(row).toEqual({ user_id: me, drone_code: 'E2E1', pilot_name: 'E2E Pilote Nord' });
+    expect(await ok(nord2.from('live_flights').select('drone_code').eq('user_id', me))).toEqual([{ drone_code: 'E2E1' }]);
+    expect(await ok(sud.from('live_flights').select('drone_code').eq('user_id', me))).toHaveLength(0);
+    expect(await ok(admin.from('live_flights').select('drone_code').eq('user_id', me))).toHaveLength(1);
+  });
+
+  test('on ne partage pas un drone d\'un autre drone port, ni le vol d\'un autre pilote', async () => {
+    const nord = await as('nord'), nord2 = await as('nord2'), sud = await as('sud');
+    const me = (await nord.auth.getUser()).data.user!.id;
+    // drone du Sud déclaré au Nord : refusé par la base
+    expect(await expectError(nord.from('live_flights').upsert(live(fx.drones.sud, fx.ports.nord), { onConflict: 'user_id' }))).toMatch(/appartient pas/i);
+    // drone port d'un autre pilote : refusé
+    await expectError(sud.from('live_flights').upsert(live(fx.drones.nord, fx.ports.nord), { onConflict: 'user_id' }));
+    // le copilote ne peut ni modifier ni supprimer la ligne du pilote
+    expect(await ok(nord2.from('live_flights').update({ lat: 0 }).eq('user_id', me).select('user_id'))).toHaveLength(0);
+    expect(await ok(nord2.from('live_flights').delete().eq('user_id', me).select('user_id'))).toHaveLength(0);
+    expect(await ok(nord.from('live_flights').select('lat').eq('user_id', me).single())).toEqual({ lat: -18.85 });
+    // fin de mission : le pilote retire sa ligne
+    await ok(nord.from('live_flights').delete().eq('user_id', me));
+    expect(await ok(nord2.from('live_flights').select('user_id').eq('user_id', me))).toHaveLength(0);
+  });
+});

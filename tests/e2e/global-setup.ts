@@ -14,6 +14,7 @@ export async function cleanE2E(sql: postgres.Sql) {
       await tx`delete from work_order_links where work_order_id in (select id from work_orders where drone_id = any(${ids}))`;
       await tx`delete from work_orders where drone_id = any(${ids})`;
       await tx`delete from crm_signatures where flight_id in (select id from flights where drone_id = any(${ids}))`;
+      await tx`delete from flight_plan_estimates where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from technical_reports where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from logbook_entries where flight_id in (select id from flights where drone_id = any(${ids}))`;
       await tx`delete from flight_pilots where flight_id in (select id from flights where drone_id = any(${ids}))`;
@@ -25,6 +26,8 @@ export async function cleanE2E(sql: postgres.Sql) {
     await tx`delete from battery_transfers where battery_id in (select b.id from batteries b join drone_ports p on p.id = b.drone_port_id where p.name in ('E2E Nord', 'E2E Sud'))`;
     await tx`delete from batteries where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
     await tx`delete from battery_packs where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
+    await tx`delete from flight_plans where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
+    await tx`delete from live_flights where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
     // rapports mensuels validés par les tests (mois de 2001, jamais utilisés par de vraies données)
     await tx`delete from monthly_reports where month < '2002-01-01'`;
     await tx`delete from unfpa_recipients where email like '%@e2e.test'`;

@@ -463,3 +463,70 @@ export interface CrmTask {
   report_count: number;
   open_reports: number;
 }
+
+/** Plan de vol WindPath enregistré (bibliothèque par drone port et destination) */
+export interface FlightPlan {
+  id: string;
+  drone_port_id: string;
+  destination_id: string | null;
+  name: string;
+  file_name: string;
+  content: string;
+  waypoint_count: number | null;
+  distance_km: number | null;
+  notes: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Vol en cours partagé avec le drone port (position recalée WindPath, pas GPS) */
+export interface LiveFlight {
+  user_id: string;
+  drone_id: string;
+  drone_port_id: string;
+  drone_code: string;
+  pilot_name: string | null;
+  status: 'sol' | 'vol' | 'arrive';
+  lat: number | null;
+  lon: number | null;
+  altitude_m: number | null;
+  heading_deg: number | null;
+  ground_speed_ms: number | null;
+  phase: string | null;
+  next_label: string | null;
+  next_eta: string | null;
+  delay_s: number | null;
+  takeoff_at: string | null;
+  landing_eta: string | null;
+  mission_name: string | null;
+  /** [[lat, lon, altitude], ...] */
+  route: [number, number, number | null][] | null;
+  drop_index: number | null;
+  updated_at: string;
+}
+
+/** Estimation WindPath retenue pour un vol (prévu), comparée au réel */
+export interface FlightPlanEstimate {
+  flight_id: string;
+  plan_id: string | null;
+  mission_name: string | null;
+  waypoint_count: number | null;
+  distance_km: number | null;
+  takeoff_time: string | null;
+  drop_time: string | null;
+  landing_time: string | null;
+  duration_min: number | null;
+  consumption_mah: number | null;
+  voltage_end_v: number | null;
+  margin_pct: number | null;
+  wind_ms: number | null;
+  wind_direction_deg: number | null;
+  max_wind_ms: number | null;
+  max_gust_ms: number | null;
+  payload_kg: number | null;
+  capacity_mah: number | null;
+  wind_checked_at: string | null;
+  created_at: string;
+}

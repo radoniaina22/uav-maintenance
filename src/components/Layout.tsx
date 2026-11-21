@@ -12,6 +12,9 @@ import { PageLoading } from '../lib/lazyPage';
 
 const COLLAPSE_KEY = 'uav.sidebarCollapsed';
 const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; } };
+/** Planification : menu replié en rail par défaut (WindPath a besoin de toute la largeur), choix mémorisé à part */
+const PLAN_COLLAPSE_KEY = 'uav.sidebarCollapsed.planning';
+const readPlanCollapsed = () => { try { return localStorage.getItem(PLAN_COLLAPSE_KEY) !== '0'; } catch { return true; } };
 
 /** Heure locale de Madagascar (EAT), utile aux équipes sur le terrain */
 function MgClock() {
@@ -36,12 +39,19 @@ const initials = (s: string) => s.split(/[\s@.]+/).filter(Boolean).slice(0, 2).m
 export default function Layout() {
   const { session, isAdmin, profile, pilot, ports, myPort, portFilter, setPortFilter } = useApp();
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [navCollapsed, setNavCollapsed] = useState(readCollapsed);
+  const [planCollapsed, setPlanCollapsed] = useState(readPlanCollapsed);
   const [palette, setPalette] = useState(false);
   const loc = useLocation();
   const currentPort = ports.find((p) => p.id === portFilter);
   const { section, title } = pageTitle(loc.pathname);
   const fullBleed = loc.pathname === '/planification';
+  const collapsed = fullBleed ? planCollapsed : navCollapsed;
+  const setCollapsed = (v: boolean) => {
+    if (!fullBleed) { setNavCollapsed(v); return; }
+    setPlanCollapsed(v);
+    try { localStorage.setItem(PLAN_COLLAPSE_KEY, v ? '1' : '0'); } catch { /* stockage indisponible */ }
+  };
   // pages de saisie et fiches : largeur de lecture confortable ; les pages de données utilisent toute la largeur
   const narrow = /^\/vols\/(nouveau|[^/]+(\/modifier|\/crm)?)$/.test(loc.pathname)
     || /^\/drones\/[^/]+(\/historique)?$/.test(loc.pathname)
@@ -49,8 +59,8 @@ export default function Layout() {
   const displayName = pilot?.full_name ?? session.user.email ?? '';
 
   useEffect(() => {
-    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* stockage indisponible */ }
-  }, [collapsed]);
+    try { localStorage.setItem(COLLAPSE_KEY, navCollapsed ? '1' : '0'); } catch { /* stockage indisponible */ }
+  }, [navCollapsed]);
 
   // Ctrl+K / ⌘K : palette de commandes
   useEffect(() => {
