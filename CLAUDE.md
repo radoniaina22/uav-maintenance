@@ -20,7 +20,13 @@ npx playwright test -g "texte du test"               # single test by title
 E2E_KEEP_DATA=1 npm run test:e2e                     # keep the E2E fixture data for inspection
 npm run sync:windpath   # copy ../WindPath/{index.html,script.js,style.css} into public/windpath/
 npm run db:backup / db:restore -- backups/<file>.dump
+npx supabase db query --linked "select …"            # SQL on the cloud DB (Management API, no password needed)
+npx supabase db query --linked -f <file>.sql         # run a SQL file online (wrap it in begin; … commit;)
+npx supabase db dump --linked --data-only -f backups/<name>.sql   # cloud data backup before a data change
+npx supabase db query --local "select …"             # or: docker exec supabase_db_uav_maintenance psql -U postgres -d postgres
 ```
+
+One-off data imports (flights, parts) follow the same path: a script generates a reviewable SQL file in `backups/` (git-ignored: the repo is public and the source files contain names), run it locally, check, then back up the cloud data and replay the same file with `db query --linked -f`. The SQL must refuse to run twice (guard at the top).
 
 `.env` needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (values from `npx supabase status`).
 
@@ -32,7 +38,8 @@ npm run db:backup / db:restore -- backups/<file>.dump
 - Invariants are enforced by triggers (max 2 pilots, closed technical reports locked except for admins, visa invalidation on reopen/edit, audit log, part codes like `MOV0001`).
 - **Migrations are append-only and redefine objects in full.** `save_flight` and `v_flights` (and others) are redefined in many migrations: the *latest* migration that touches an object holds its current definition. To change one, add a new timestamped migration (`YYYYMMDDHHMMSS_name.sql`) that `drop view if exists` / `create or replace` the whole object, copied from its most recent version. Dropping a view can require recreating dependent views.
 - **Always grant privileges explicitly** in each migration (`grant select, … on public.<table> to authenticated`). The cloud project has no default privileges for `anon` / `authenticated` (unlike the local stack, where tests pass anyway), so a table without explicit grants works locally but is "permission denied" online. `service_role` gets default privileges since `20261217000000_explicit_grants.sql`.
-- Parts imported from the old register (`scripts/import-old-parts.py`, one-off, generates SQL from the Excel files in `backups/old-parts/`) keep their old code in `parts.legacy_code` (e.g. `MOV000038` → `MOV0001`); scan and inventory search accept both codes. Imported `part_events` have `imported = true` and `editor_name` (author without an account); `v_part_events.actor_name` = user name, else `editor_name`.
+- Parts: code = 3-letter type + per-type counter (`parts_assign_code` trigger + `part_code_counters`, e.g. `MOV0001`); never set `code` by hand. Types with `part_types.multi = true` (`CNT`, `FLE`, `SOT`, `CMR`) have no slot: mounted with `slot = null` and a zone. Tango 4 VTOL position numbering used by the old register: 1 = front right (`AVD`), 2 = rear left (`ARG`), 3 = front left (`AVG`), 4 = rear right (`ARD`), 5 = horizontal.
+- Parts imported from the old register (`scripts/import-old-parts.py`, done 2026-11-22 locally and online; it generates SQL from the Excel files in `backups/old-parts/`) keep their old code in `parts.legacy_code` (e.g. `MOV000038` → `MOV0001`, unique). Scan (`Scan.tsx` `loadPart`, `QrScanner.tsx` `findPartId`) and inventory search accept both codes; the detail page and labels show « ex-… ». Imported `part_events` have `imported = true` and `editor_name` (author without an account); `v_part_events.actor_name` = user name, else `editor_name` (also used by `drone_history`). Their hours come from flights (`initial_hours = 0`) when the part has a mounting history, else from the old register's hours.
 - Scoping: RLS helpers `is_admin()`, `my_pilot_id()`, `my_drone_port_id()`, `can_manage_port()`. Pilots only see their drone port's data **at the DB level**; admins see everything.
 - WindPath-related tables: `flight_plans` (plan library per port/destination), `flight_plan_estimates` (estimate summary kept with a flight), `flight_windpath_records` (full mission jsonb kept with a flight, rendered as the WindPath report annexed to the CRM), `live_flights` (one row per user = their flight in progress, shared in **realtime** with their drone port; PK `user_id`, a trigger forces `drone_code` / `pilot_name` / `updated_at` and checks the drone belongs to the port; table is in the `supabase_realtime` publication).
 - Realtime: subscribe with `supabase.channel(...).on('postgres_changes', …)` (see `lib/liveTraffic.ts`). RLS applies to subscribers; DELETE events are not filterable and only carry the primary key.
@@ -81,3 +88,6 @@ The repo is **public**: run logs and artifacts are visible to any GitHub user (s
 
 - Vite HMR can serve stale modules after several edits: restart the dev server before concluding a change does not work.
 - The first `supabase migration up` / CLI call can hang: stop it, check `npx supabase --version`, retry once.
+- The local stack may run without the Edge runtime (`supabase_edge_runtime_*` stopped): the E2E test « l'administrateur commente, valide puis rouvre le rapport UNFPA » then times out locally (validation calls `send-monthly-reports`). It passes in CI; not a regression.
+- Git Bash rewrites `/tmp/...` paths passed to `docker exec` / `docker cp`: prefix with `MSYS_NO_PATHCONV=1`. The DB container is `supabase_db_uav_maintenance` (other projects' `supabase_db_*` containers also run).
+- No Excel library is installed: `.xlsx` files are read with Python stdlib (zip + XML), see `scripts/import-old-parts.py`.
