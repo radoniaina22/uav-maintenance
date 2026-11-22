@@ -27,8 +27,9 @@ type Toast = { text: string; tone: 'ok' | 'warn' | 'danger' };
 
 const DRONE_COLS = 'id, code, model, drone_port_id';
 
+/** Pièce par son code, ou par son ancien code tant que les anciennes étiquettes sont en place */
 async function loadPart(code: string) {
-  const { data } = await supabase.from('v_parts').select('*').eq('code', code).maybeSingle();
+  const { data } = await supabase.from('v_parts').select('*').or(`code.eq.${code},legacy_code.eq.${code}`).limit(1).maybeSingle();
   return data as PartRow | null;
 }
 async function findDrone(code: string) {

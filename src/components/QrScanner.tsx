@@ -16,9 +16,9 @@ export function extractDroneCode(text: string): string | null {
   return m ? m[1].trim() : null;
 }
 
-/** Renvoie l'id de la pièce portant ce code, ou null si inconnue / hors de votre drone port. */
+/** Renvoie l'id de la pièce portant ce code (ou cet ancien code), ou null si inconnue / hors de votre drone port. */
 export async function findPartId(code: string): Promise<string | null> {
-  const { data } = await supabase.from('v_parts').select('id').eq('code', code).maybeSingle();
+  const { data } = await supabase.from('v_parts').select('id').or(`code.eq.${code},legacy_code.eq.${code}`).limit(1).maybeSingle();
   return (data as { id: string } | null)?.id ?? null;
 }
 

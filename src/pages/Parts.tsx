@@ -534,7 +534,7 @@ function InventoryTab({ parts, types, showPort }: { parts: PartRow[]; types: Par
   const rows = parts.filter((p) =>
     (!status || p.status === status) && (!category || p.category === category) && (!type || p.type_code === type) &&
     (!alert || (alert === 'unknown' ? potentialLevel(p) === 'unknown' : ['warn', 'danger'].includes(potentialLevel(p)))) &&
-    (!q || `${p.code} ${p.serial_number ?? ''} ${p.manufacturer ?? ''} ${p.drone_code ?? ''}`.toLowerCase().includes(q.toLowerCase())));
+    (!q || `${p.code} ${p.legacy_code ?? ''} ${p.serial_number ?? ''} ${p.manufacturer ?? ''} ${p.drone_code ?? ''}`.toLowerCase().includes(q.toLowerCase())));
   const picked = rows.filter((p) => sel.has(p.id));
   const allPicked = rows.length > 0 && picked.length === rows.length;
   const count = (s: string) => parts.filter((p) => p.status === s).length;
@@ -568,7 +568,7 @@ function InventoryTab({ parts, types, showPort }: { parts: PartRow[]; types: Par
           </select>
         </label>
         <label className="field field-grow"><span className="field-label">Recherche</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Code, n° de série, fabricant, drone…" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Code (nouveau ou ancien), n° de série, fabricant, drone…" />
         </label>
       </div>
       {rows.length === 0 ? <Empty>Aucune pièce.</Empty> : (
@@ -590,7 +590,7 @@ function InventoryTab({ parts, types, showPort }: { parts: PartRow[]; types: Par
                   <tr key={p.id}>
                     <td className="col-check"><input type="checkbox" aria-label={`Sélectionner ${p.code}`} checked={sel.has(p.id)}
                       onChange={() => { const s = new Set(sel); if (s.has(p.id)) s.delete(p.id); else s.add(p.id); setSel(s); }} /></td>
-                    <td><Link to={`/pieces/${p.id}`}><strong>{p.code}</strong></Link></td>
+                    <td><Link to={`/pieces/${p.id}`}><strong>{p.code}</strong></Link>{p.legacy_code && <div className="small muted mono" title="Ancien code">ex-{p.legacy_code}</div>}</td>
                     <td>{p.type_name}<div className="small muted">{p.category}</div></td>
                     <td>{p.serial_number ?? '—'}</td>
                     <td><Badge level={PART_STATUS[p.status].level}>{PART_STATUS[p.status].label}</Badge></td>

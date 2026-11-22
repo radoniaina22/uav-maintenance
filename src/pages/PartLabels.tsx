@@ -43,7 +43,7 @@ export default function PartLabels() {
       const q = supabase.from('v_parts').select('*');
       return (ids.length ? q.in('id', ids) : q.in('code', codes)).order('code').range(a, b);
     });
-    return rows.map((p) => ({ id: p.id, qr: partQrValue(p.code), code: p.code, drone: false, lines: [p.type_name, ...(p.serial_number ? [`S/N ${p.serial_number}`] : [])] }));
+    return rows.map((p) => ({ id: p.id, qr: partQrValue(p.code), code: p.code, drone: false, lines: [p.type_name, ...(p.legacy_code ? [`ex-${p.legacy_code}`] : []), ...(p.serial_number ? [`S/N ${p.serial_number}`] : [])] }));
   }, [ids.join(), codes.join(), droneIds.join()]);
 
   const pickSize = (s: Size) => { setSize(s); try { localStorage.setItem('uav.labelSize', s); } catch { /* sans stockage */ } };

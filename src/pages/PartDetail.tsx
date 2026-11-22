@@ -131,6 +131,7 @@ export default function PartDetail() {
           <h2>{p.type_name}</h2>
           <dl className="ph-facts">
             <div><dt>Code</dt><dd className="mono">{p.code}</dd></div>
+            {p.legacy_code && <div><dt>Ancien code</dt><dd className="mono">{p.legacy_code}</dd></div>}
             <div><dt>N° de série</dt><dd>{p.serial_number ?? '—'}</dd></div>
             <div><dt>Fabricant</dt><dd>{p.manufacturer ?? '—'}</dd></div>
             <div><dt>Potentiel</dt><dd>{p.max_hours_effective != null ? <>{hours(p.max_hours_effective)} <small>{p.max_hours != null ? 'propre à la pièce' : 'du type'}</small></> : <span className="text-warn">à définir</span>}</dd></div>
@@ -259,6 +260,9 @@ export default function PartDetail() {
                       {e.event_type === 'entree_stock' && e.to_port_name}
                     </div>
                     {e.reason && <div className="mv-reason">{e.reason}</div>}
+                    {(e.actor_name || e.imported) && <div className="small muted">
+                      {e.actor_name ? `Par ${e.actor_name}` : ''}{e.imported ? `${e.actor_name ? ' · ' : ''}ancien registre` : ''}
+                    </div>}
                   </div>
                 </li>
               ))}

@@ -44,6 +44,8 @@ export interface DroneSlot {
 export interface PartRow {
   id: string;
   code: string;
+  /** Ancien code (registre antérieur à l'application, ex. MOV000038) */
+  legacy_code: string | null;
   type_code: string;
   serial_number: string | null;
   manufacturer: string | null;
@@ -80,8 +82,14 @@ export interface PartEventRow {
   from_port_id: string | null;
   to_port_id: string | null;
   reason: string | null;
+  /** Opération reprise de l'ancien registre */
+  imported: boolean;
+  editor_name: string | null;
   created_at: string;
   part_code: string;
+  part_legacy_code: string | null;
+  /** Auteur : utilisateur de l'application, sinon éditeur de l'ancien registre */
+  actor_name: string | null;
   type_code: string;
   type_name: string;
   drone_code: string | null;
