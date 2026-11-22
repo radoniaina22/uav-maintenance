@@ -21,6 +21,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Maintenance',
     items: [
+      { to: '/alertes', label: 'Alertes', icon: 'bell', keywords: 'e-mail mail notification visite potentiel météo retard crm seuil' },
       { to: '/rapports', label: 'Rapports & incidents', icon: 'alert', keywords: 'technique défaillance' },
       { to: '/drones', label: 'Drones & visites', icon: 'drone', keywords: '250 h visite systématique mal1 mal2 mal3' },
       { to: '/ordres-travail', label: 'Ordres de travail', icon: 'wrench', keywords: 'ot intervention maintenance signature responsable' },

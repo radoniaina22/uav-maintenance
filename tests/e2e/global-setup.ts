@@ -34,6 +34,12 @@ export async function cleanE2E(sql: postgres.Sql) {
     await tx`delete from unfpa_recipients where email like '%@e2e.test'`;
     await tx`delete from report_dispatches where month < '2002-01-01'
                or exists (select 1 from unnest(recipients) r where r like '%@test.local' or r like '%@e2e.test')`;
+    // alertes calculées sur les drone ports E2E ou pour les comptes de test (les FK en cascade ne jouent pas ici)
+    await tx`delete from alert_events where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))
+               or target_user in (select id from auth.users where email like 'e2e-%@test.local')
+               or (kind = 'inscription' and key in (select id::text from auth.users where email like 'e2e-%@test.local'))`;
+    await tx`delete from alert_optouts where user_id in (select id from auth.users where email like 'e2e-%@test.local')`;
+    await tx`delete from alert_dispatches where recipient like '%@test.local'`;
     await tx`delete from audit_log where actor like 'E2E %' or actor like 'e2e-%' or label in ('E2E1', 'E2E2', 'E2E Nord', 'E2E Sud', 'E2E CSB Nord')`;
   });
 }

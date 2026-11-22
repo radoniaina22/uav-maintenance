@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { as, expectError, fixture, ok } from './env';
+import { createClient } from '@supabase/supabase-js';
+import { as, ENV, expectError, fixture, ok, USERS } from './env';
 import type { Fixture } from './env';
 
 /**
@@ -386,5 +387,73 @@ test.describe('Mission WindPath jointe au CRM', () => {
     await expectError(sud.from('flight_windpath_records').upsert({ flight_id: flightId, record: { ...record, missionName: 'pirate' } }).select('flight_id').single());
     // une mission qui n'est pas un objet JSON est refusée
     await expectError(nord.from('flight_windpath_records').upsert({ flight_id: flightId, record: [1, 2] }));
+  });
+});
+
+test.describe('Alertes par e-mail', () => {
+  const service = () => createClient(ENV.API_URL!, ENV.SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+  type Out = { event_id: string; kind: string; drone_port_id: string | null; email: string; title: string };
+
+  test('calcul, réglages et journal protégés ; alertes désactivées par défaut', async () => {
+    const nord = await as('nord'), admin = await as('admin');
+    await expectError(nord.rpc('alerts_outbox', { p_mode: 'tout' }));
+    await expectError(nord.rpc('alerts_current'));
+    await expectError(nord.rpc('alerts_mark_notified', { p_ids: [] }));
+    expect(await expectError(nord.rpc('set_alert_settings', { p_enabled: true, p_functions_url: 'http://x' }))).toMatch(/administrateurs/i);
+    expect(await ok(nord.from('alert_kinds').update({ enabled: false }).eq('code', 'incident').select('code'))).toHaveLength(0);
+    expect(await ok(nord.from('alert_settings').update({ visit_warn_hours: 1 }).eq('id', true).select('id'))).toHaveLength(0);
+    expect(await ok(nord.from('alert_dispatches').select('id'))).toHaveLength(0);
+    await ok(nord.rpc('alerts_refresh'));
+    expect((await ok(admin.from('alert_settings').select('enabled').single())).enabled).toBe(false);
+    expect(await expectError(admin.rpc('set_alert_settings', { p_enabled: true, p_functions_url: '' }))).toMatch(/adresse/i);
+    // personne n'écrit directement les alertes ni le journal
+    await expectError(admin.from('alert_events').insert({ kind: 'incident', key: 'x', level: 'info', title: 'x' }).select('id').single());
+    await expectError(admin.from('alert_dispatches').insert({ mode: 'test', trigger: 'test', recipient: 'x', status: 'envoye' }).select('id').single());
+  });
+
+  test('drone en retard : alerte immédiate au drone port (préférences respectées), résolue à l\'atterrissage', async () => {
+    const nord = await as('nord'), nord2 = await as('nord2'), sud = await as('sud'), admin = await as('admin');
+    const svc = service();
+    const me = (await nord.auth.getUser()).data.user!.id;
+    const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+    await ok(nord.from('live_flights').upsert({ drone_id: fx.drones.nord, drone_port_id: fx.ports.nord, status: 'vol', lat: -18.9, lon: 47.5,
+      takeoff_at: ago(60), landing_eta: ago(30) }, { onConflict: 'user_id' }));
+    await ok(admin.rpc('alerts_refresh'));
+    const seen = await ok(nord2.from('alert_events').select('title, level').eq('kind', 'vol_suivi').is('resolved_at', null));
+    expect(seen).toEqual([{ title: 'Drone en retard · E2E1', level: 'danger' }]);
+    expect(await ok(sud.from('alert_events').select('id').eq('kind', 'vol_suivi').eq('drone_port_id', fx.ports.nord))).toHaveLength(0);
+
+    const recipients = async () => new Set((await ok(svc.rpc('alerts_outbox', { p_mode: 'immediat' })) as Out[])
+      .filter((o) => o.kind === 'vol_suivi' && o.drone_port_id === fx.ports.nord).map((o) => o.email));
+    const to = await recipients();
+    expect([USERS.nord, USERS.nord2, USERS.admin].every((e) => to.has(e))).toBe(true);
+    expect(to.has(USERS.sud)).toBe(false);
+    // le copilote ne veut pas de cette alerte
+    await ok(nord2.from('alert_optouts').insert({ kind: 'vol_suivi' }));
+    expect((await recipients()).has(USERS.nord2)).toBe(false);
+    await ok(nord2.from('alert_optouts').delete().eq('kind', 'vol_suivi'));
+    // une fois envoyée, elle ne repart pas
+    const ids = (await ok(svc.rpc('alerts_outbox', { p_mode: 'immediat' })) as Out[]).filter((o) => o.kind === 'vol_suivi' && o.drone_port_id === fx.ports.nord).map((o) => o.event_id);
+    await ok(svc.rpc('alerts_mark_notified', { p_ids: [...new Set(ids)] }));
+    expect((await recipients()).size).toBe(0);
+    // atterrissage : la ligne disparaît, l'alerte est résolue
+    await ok(nord.from('live_flights').delete().eq('user_id', me));
+    await ok(admin.rpc('alerts_refresh'));
+    expect(await ok(nord.from('alert_events').select('id').eq('kind', 'vol_suivi').eq('drone_port_id', fx.ports.nord).is('resolved_at', null))).toHaveLength(0);
+  });
+
+  test('incident : responsables maintenance du drone port et administrateurs', async () => {
+    const nord = await as('nord'), admin = await as('admin');
+    const r = await ok(nord.from('technical_reports').insert({
+      flight_id: flightId, report_type: 'incident', severity: 'majeur', component: 'ESC', description: 'Coupure moteur (test automatique)', status: 'ouvert',
+    }).select('id').single());
+    await ok(admin.rpc('alerts_refresh'));
+    const out = (await ok(service().rpc('alerts_outbox', { p_mode: 'immediat' })) as Out[]).filter((o) => o.kind === 'incident' && o.drone_port_id === fx.ports.nord);
+    expect(out[0]?.title).toBe('Incident majeur · E2E1 · ESC');
+    const to = new Set(out.map((o) => o.email));
+    // « E2E Pilote Nord » est responsable maintenance, pas le copilote
+    expect(to.has(USERS.nord) && to.has(USERS.admin)).toBe(true);
+    expect(to.has(USERS.nord2) || to.has(USERS.sud)).toBe(false);
+    await ok(admin.from('technical_reports').update({ status: 'clos', corrective_action: 'ESC remplacé (test automatique)' }).eq('id', r.id));
   });
 });

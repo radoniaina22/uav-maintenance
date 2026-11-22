@@ -3,8 +3,9 @@ import { supabase } from './supabase';
 import type { ReportKind } from './monthlyReports';
 
 export const SEND_FUNCTION = 'send-monthly-reports';
-/** Adresse de la fonction, enregistrée dans report_settings pour l'appel mensuel par pg_cron */
-export const sendFunctionUrl = () => `${String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')}/functions/v1/${SEND_FUNCTION}`;
+/** Adresse d'une fonction d'envoi, enregistrée en base pour les appels par pg_cron */
+export const functionUrl = (name: string) => `${String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')}/functions/v1/${name}`;
+export const sendFunctionUrl = () => functionUrl(SEND_FUNCTION);
 /** Adresse publique de l'application (liens et logo des e-mails) ; pas d'adresse locale */
 export const publicAppUrl = () => {
   const { origin, pathname, hostname } = window.location;
@@ -21,7 +22,12 @@ export const SEND_STATUS: Record<SendResult['status'], string> = {
 };
 
 export async function invokeSend(body: { mode: 'monthly' | 'send'; kind?: ReportKind; month?: string; port?: string | null; test?: boolean; force?: boolean }) {
-  const { data, error } = await supabase.functions.invoke(SEND_FUNCTION, { body });
+  return invokeFunction<{ ok: boolean; month: string; dryRun: boolean; results: SendResult[] }>(SEND_FUNCTION, body);
+}
+
+/** Appel d'une fonction d'envoi avec un message d'erreur lisible */
+export async function invokeFunction<T>(name: string, body: unknown): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(name, { body: body as Record<string, unknown> });
   if (error) {
     // réponse de la fonction : message JSON { error }, sinon code HTTP et début du texte reçu
     const ctx = (error as { context?: unknown }).context;
@@ -33,9 +39,9 @@ export async function invokeSend(body: { mode: 'monthly' | 'send'; kind?: Report
     }
     // aucune réponse : réseau, blocage CORS, fonction absente
     const detail = ctx instanceof Error ? ctx.message : error.message;
-    throw new Error(`La fonction d'envoi est injoignable (${detail}). Vérifiez la connexion et que la fonction « ${SEND_FUNCTION} » est déployée.`);
+    throw new Error(`La fonction d'envoi est injoignable (${detail}). Vérifiez la connexion et que la fonction « ${name} » est déployée.`);
   }
-  return data as { ok: boolean; month: string; dryRun: boolean; results: SendResult[] };
+  return data as T;
 }
 
 /** Résumé lisible des résultats d'un envoi */

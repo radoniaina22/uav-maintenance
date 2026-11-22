@@ -15,6 +15,7 @@ const FlightDetail = lazyPage(() => import('./pages/FlightDetail'));
 const Reports = lazyPage(() => import('./pages/Reports'));
 const Statistics = lazyPage(() => import('./pages/Statistics'));
 const MonthlyReports = lazyPage(() => import('./pages/MonthlyReports'));
+const Alerts = lazyPage(() => import('./pages/Alerts'));
 const Planning = lazyPage(() => import('./pages/Planning'));
 const Drones = lazyPage(() => import('./pages/Drones'));
 const DroneDetail = lazyPage(() => import('./pages/DroneDetail'));
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="consommation" element={<Consumption />} />
           <Route path="planification" element={<Planning />} />
           <Route path="rapports" element={<Reports />} />
+          <Route path="alertes" element={<Alerts />} />
           <Route path="drones" element={<Drones />} />
           <Route path="drones/:id" element={<DroneDetail />} />
           <Route path="drones/:id/historique" element={<DroneHistory />} />

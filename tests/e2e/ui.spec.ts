@@ -143,3 +143,29 @@ test('une batterie se crée sans numéro de série depuis l\'interface', async (
   await page.reload();
   await expect(page.locator('.bloose-item', { hasText: 'E2E Nord' }).filter({ hasText: 'sans n° de série' })).not.toHaveCount(0);
 });
+test('page Alertes : un pilote choisit les e-mails qu\'il reçoit', async ({ page }) => {
+  await login(page, 'nord2');
+  await page.goto('/#/alertes');
+  await expect(page.getByRole('heading', { name: 'Mes e-mails d\'alerte' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Seuils' })).toHaveCount(0);
+  // le copilote (non responsable) ne se voit pas proposer les alertes réservées aux responsables ni aux administrateurs
+  await expect(page.locator('.al-pref', { hasText: 'Incident déclaré' })).toHaveCount(0);
+  await expect(page.locator('.al-pref', { hasText: 'Nouvelle demande d\'inscription' })).toHaveCount(0);
+  const box = page.locator('.al-pref', { hasText: 'Météo défavorable demain' }).locator('input');
+  await expect(box).toBeChecked();
+  await box.click();
+  await expect(box).not.toBeChecked();
+  const nord2 = await as('nord2');
+  expect(await ok(nord2.from('alert_optouts').select('kind'))).toEqual([{ kind: 'meteo' }]);
+  await box.click();
+  await expect(box).toBeChecked();
+});
+
+test('page Alertes : l\'administrateur voit l\'activation, les types et les seuils', async ({ page }) => {
+  await login(page, 'admin');
+  await page.goto('/#/alertes');
+  await expect(page.getByRole('heading', { name: 'Envoi automatique' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Types d\'alertes' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Seuils' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Activer les alertes' })).toBeVisible();
+});
