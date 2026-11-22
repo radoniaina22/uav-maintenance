@@ -5,8 +5,10 @@
 #
 # Secrets à créer (Settings → Secrets and variables → Actions) :
 #   SUPABASE_DB_URL     chaîne de connexion « Session pooler » (Supabase → Connect),
-#                       ex. postgresql://postgres.<ref>:<mot-de-passe>@aws-0-<region>.pooler.supabase.com:5432/postgres
+#                       ex. postgresql://postgres.<ref>:<mot-de-passe>@aws-1-eu-west-1.pooler.supabase.com:5432/postgres
+#                       (pas « Direct connection » db.<ref>.supabase.co : IPv6 seulement, injoignable depuis GitHub)
 #   BACKUP_PASSPHRASE   phrase secrète de chiffrement (à conserver aussi hors de GitHub : sans elle, pas de restauration)
+# Tutoriel complet (mise en place, téléchargement, déchiffrement, restauration) : README, « Sauvegardes et restauration ».
 name: Sauvegarde de la base
 
 on:

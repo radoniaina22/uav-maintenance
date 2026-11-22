@@ -1,6 +1,6 @@
 // Restauration d'une sauvegarde dans la base LOCALE : `npm run db:restore -- backups/<fichier>.dump`
 // Les données actuelles de la base locale (schémas public et auth) sont remplacées : une sauvegarde est faite avant.
-// (Restaurer en production se fait volontairement à la main : voir le README, section « Sauvegardes ».)
+// (Restaurer en production se fait volontairement à la main : voir le README, section « Sauvegardes et restauration ».)
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
