@@ -368,7 +368,8 @@ function FlightsSection({ rows, showPort }: { rows: FlightRow[]; showPort?: bool
 export function TechReportView({ r }: { r: TechReport }) {
   const all = !r.drone_port;
   return (
-    <Sheet title="Rapport technique mensuel" subtitle={r.drone_port ? `Drone port de ${r.drone_port.name}` : 'Tous les drone ports'} period={r.period}>
+    <Sheet title="Rapport technique mensuel" subtitle={r.drone_port ? `Drone port de ${r.drone_port.name}` : 'Tous les drone ports'} period={r.period}
+      logo={{ src: './logo-unfpa.png', alt: 'UNFPA' }}>
       <Section title="Activité du mois"><FlightKpis s={r.summary} p={r.previous} /></Section>
       <OpenFlightsSection rows={r.open_flights} />
       <FleetSection rows={r.fleet} showPort={all} />

@@ -153,7 +153,7 @@ function pilotsEmail(i: EmailInput): EmailOutput {
   }));
   return {
     subject: `${i.test ? '[TEST] ' : ''}Rapport technique ${monthLabel(month)} · ${port}`,
-    html: layout({ title: 'Rapport technique mensuel', subtitle: port, month, logo: false, body, link: link(i.appUrl, 'pilotes', month), test: i.test, appUrl: i.appUrl }),
+    html: layout({ title: 'Rapport technique mensuel', subtitle: port, month, logo: true, body, link: link(i.appUrl, 'pilotes', month), test: i.test, appUrl: i.appUrl }),
     text: `Rapport technique ${monthLabel(month)} · ${port} : ${s.flights} vol(s), ${num(Number(s.minutes) / 60)} h, ${s.qrf} QRF, ${r.reports.open_total} rapport(s) ouvert(s).`,
     csv: { name: `vols-${month}-${port}.csv`.replace(/[\\/:*?"<>|\s]+/g, '-'), content: csv(flights) },
   };
