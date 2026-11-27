@@ -49,6 +49,18 @@
   }
 
   // -------------------------------------------------------------------
+  // Heure de décollage remise à maintenant (nouveau plan importé ou chargé, nouvelle mission)
+  // Exception : une heure future reprise du formulaire de vol (décollage prévu plus tard) est gardée.
+  // -------------------------------------------------------------------
+  let prefilledTakeoffAt = null;
+  function setTakeoffNow() {
+    if (prefilledTakeoffAt != null && prefilledTakeoffAt > Date.now()) return false;
+    elements.takeoffTime.value = localDateTimeValue(new Date());
+    elements.takeoffTime.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
+  // -------------------------------------------------------------------
   // Fichier importé : capturé sans toucher aux écouteurs de WindPath
   // -------------------------------------------------------------------
   async function rememberFile(file) {
@@ -56,7 +68,7 @@
     try {
       const text = await file.text();
       // WindPath lit le fichier en parallèle : la signature est prise une fois les points chargés
-      setTimeout(() => { if (state.missionName === file.name) { lastFile = { name: file.name, text, sig: signature() }; planId = null; } }, 400);
+      setTimeout(() => { if (state.missionName === file.name) { lastFile = { name: file.name, text, sig: signature() }; planId = null; setTakeoffNow(); } }, 400);
     } catch { /* fichier illisible : WindPath affichera son propre message */ }
   }
   elements.missionFile.addEventListener('change', (e) => rememberFile(e.target.files && e.target.files[0]), true);
@@ -71,6 +83,7 @@
     if (setInput(elements.batteryCapacity, p.capacityMah, 'input')) applied.push(`capacité ${Math.round(p.capacityMah)} mAh`);
     if (setInput(elements.departureVoltage, p.departureVoltage, 'input')) applied.push(`tension de départ ${p.departureVoltage} V`);
     if (typeof p.takeoff === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(p.takeoff)) {
+      prefilledTakeoffAt = new Date(p.takeoff).getTime();
       elements.takeoffTime.value = p.takeoff;
       elements.takeoffTime.dispatchEvent(new Event('change', { bubbles: true }));
       applied.push(`décollage ${p.takeoff.slice(8, 10)}/${p.takeoff.slice(5, 7)} ${p.takeoff.slice(11)}`);
@@ -294,6 +307,7 @@
     lastFile = { name: fileName, text: p.content, sig: signature() };
     planId = p.id || null;
     renderWaypoints();
+    setTakeoffNow();
     return { ok: true, name: state.missionName, count: state.waypoints.length };
   }
 
@@ -2494,7 +2508,7 @@
         trafficSelf = event.data.self || trafficSelf;
         renderTraffic();
       }
-      if (type === 'clear') { clearMission(); lastFile = null; planId = null; save(); }
+      if (type === 'clear') { clearMission(); lastFile = null; planId = null; prefilledTakeoffAt = null; setTakeoffNow(); save(); }
     } catch (err) {
       const message = `WindPath : ${err && err.message ? err.message : err}`;
       if (type === 'loadPlan') post({ type: 'planLoaded', ok: false, error: message });
