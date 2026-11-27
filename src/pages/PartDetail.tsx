@@ -4,7 +4,7 @@ import { fetchAll, supabase, unwrap } from '../lib/supabase';
 import { useData } from '../lib/useData';
 import type { PartEventRow, PartInstallationRow, PartRow } from '../lib/types';
 import { date, hours, num } from '../lib/format';
-import { cycles, dateTime, PART_EVENT, PART_STATUS, potentialLevel, remainingCycles, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
+import { cycles, dateTime, fetchCompatibleTypes, PART_EVENT, PART_STATUS, potentialLevel, remainingCycles, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
 import { addDays, daysBetween, iso, parseIso } from '../lib/stats';
 import { FORECAST_WINDOW_DAYS, projection } from '../lib/dashboard';
 import { Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
@@ -51,11 +51,13 @@ export default function PartDetail() {
   const { data, error, loading, reload } = useData(async () => {
     const part = unwrap(await supabase.from('v_parts').select('*').eq('id', id).single()) as PartRow;
     const since = addDays(iso(new Date()), -(FORECAST_WINDOW_DAYS - 1));
+    // remplacement : même type ou type interchangeable (servo d'aileron <-> gouverne)
+    const types = part.status === 'monte' ? await fetchCompatibleTypes(part.type_code) : [part.type_code];
     const [inst, events, candidates, flights] = await Promise.all([
       supabase.from('v_part_installations').select('*').eq('part_id', id).order('installed_at', { ascending: false }),
       supabase.from('v_part_events').select('*').eq('part_id', id).order('at', { ascending: false }).order('created_at', { ascending: false }),
       part.status === 'monte'
-        ? fetchAll<PartRow>((a, b) => supabase.from('v_parts').select('*').eq('status', 'stock').eq('type_code', part.type_code)
+        ? fetchAll<PartRow>((a, b) => supabase.from('v_parts').select('*').eq('status', 'stock').in('type_code', types)
           .eq('drone_port_id', part.drone_port_id ?? '').range(a, b))
         : Promise.resolve([] as PartRow[]),
       part.drone_id

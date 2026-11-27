@@ -5,7 +5,7 @@ import { byPort, useApp } from '../lib/app';
 import { useData } from '../lib/useData';
 import type { Drone, DroneSlot, PartEventRow, PartRow, PartType, StockThreshold } from '../lib/types';
 import { hours, num } from '../lib/format';
-import { dateTime, PART_EVENT, PART_STATUS, potentialLevel, POTENTIAL_WARN_PCT, remainingCycles, remainingHours, zoneLabel } from '../lib/parts';
+import { compatibleTypes, dateTime, PART_EVENT, PART_STATUS, potentialLevel, POTENTIAL_WARN_PCT, remainingCycles, remainingHours, zoneLabel } from '../lib/parts';
 import { addDays, daysBetween, download, iso, parseIso, toCsv } from '../lib/stats';
 import { FORECAST_WINDOW_DAYS, projection } from '../lib/dashboard';
 import { Badge, Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
@@ -110,8 +110,11 @@ export default function Parts() {
   if (!data || !alerts) return null;
 
   const typeName = (code: string) => data.types.find((t) => t.code === code)?.name ?? code;
-  const stockCandidates = (typeCode: string, portId: string | null) =>
-    data.parts.filter((p) => p.status === 'stock' && p.type_code === typeCode && p.drone_port_id === portId);
+  // pièces montables : le type de l'emplacement et les types interchangeables (servo d'aileron <-> gouverne)
+  const stockCandidates = (typeCode: string, portId: string | null) => {
+    const ok = compatibleTypes(data.types, typeCode);
+    return data.parts.filter((p) => p.status === 'stock' && ok.includes(p.type_code) && p.drone_port_id === portId);
+  };
   const equipPct = alerts.totalSlots ? Math.round(((alerts.totalSlots - alerts.emptySlots) / alerts.totalSlots) * 100) : 0;
   const nStock = data.parts.filter((p) => p.status === 'stock').length;
 
@@ -196,7 +199,7 @@ export default function Parts() {
         const droneId = modal.droneId ?? params.get('drone') ?? data.drones[0]?.id;
         const drone = data.drones.find((d) => d.id === droneId)!;
         return <MountModal droneId={drone.id} droneCode={drone.code} slot={modal.slot?.code ?? null} slotLabel={modal.slot?.label ?? `${typeName(modal.typeCode)} – ${zoneLabel(modal.zone)}`}
-          zone={modal.zone} typeName={typeName(modal.typeCode)} candidates={stockCandidates(modal.typeCode, drone.drone_port_id)} onClose={close} onDone={done} />;
+          zone={modal.zone} typeName={typeName(modal.typeCode)} slotType={modal.typeCode} candidates={stockCandidates(modal.typeCode, drone.drone_port_id)} onClose={close} onDone={done} />;
       })()}
     </div>
   );

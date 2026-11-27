@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { supabase, unwrap } from '../lib/supabase';
 import type { DroneSlot, PartRow } from '../lib/types';
 import { hours } from '../lib/format';
-import { nowLocal, PART_STATUS, potentialLevel, remainingHours, zoneLabel } from '../lib/parts';
+import { fetchCompatibleTypes, nowLocal, PART_STATUS, potentialLevel, remainingHours, zoneLabel } from '../lib/parts';
 import { extractDroneCode, extractPartCode, scanFeedback, useQrCamera } from '../components/QrScanner';
-import { FAILURES, GOOD_REASONS, PotentialBar } from '../components/PartModals';
+import { FAILURES, GOOD_REASONS, MountWarnings, PotentialBar } from '../components/PartModals';
 import { QuickChips } from '../components/FormKit';
 import { Badge, ErrorBox } from '../components/ui';
 import { Icon } from '../components/icons';
@@ -87,7 +87,7 @@ function MountFlow({ part, ctxDrone, onDone, onCancel }: { part: PartRow; ctxDro
   const ctxOk = ctxDrone && ctxDrone.drone_port_id === part.drone_port_id ? ctxDrone.id : '';
   const [drones, setDrones] = useState<ScanDrone[] | null>(null);
   const [droneId, setDroneId] = useState(ctxOk);
-  const [places, setPlaces] = useState<{ value: string; label: string; zone: string; occupant: string | null }[] | null>(null);
+  const [places, setPlaces] = useState<{ value: string; label: string; zone: string; occupant: string | null; cross: boolean }[] | null>(null);
   const [choice, setChoice] = useState('');
   const [notes, setNotes] = useState('');
   const [at, setAt] = useState<string | null>(null);
@@ -110,14 +110,18 @@ function MountFlow({ part, ctxDrone, onDone, onCancel }: { part: PartRow; ctxDro
     Promise.all([
       supabase.from('drone_slots').select('*').eq('model', drone.model).order('sort'),
       supabase.from('v_parts').select('code, slot').eq('drone_id', drone.id).eq('status', 'monte'),
-    ]).then(([s, m]) => {
+      fetchCompatibleTypes(part.type_code),
+    ]).then(([s, m, okTypes]) => {
       if (!alive) return;
       const slots = (s.data ?? []) as DroneSlot[];
       const mounted = (m.data ?? []) as { code: string; slot: string | null }[];
+      // emplacements de son type d'abord, puis ceux d'un type interchangeable (montage croisé)
+      const own = slots.filter((x) => x.type_code === part.type_code);
+      const cross = slots.filter((x) => x.type_code !== part.type_code && okTypes.includes(x.type_code));
       const list = part.multi
         // connecteurs, fils… : pas d'emplacement unique, on choisit la zone
-        ? [...new Set(slots.map((x) => x.zone))].map((z) => ({ value: z, label: zoneLabel(z), zone: z, occupant: null }))
-        : slots.filter((x) => x.type_code === part.type_code).map((x) => ({ value: x.code, label: x.label, zone: x.zone, occupant: mounted.find((p) => p.slot === x.code)?.code ?? null }));
+        ? [...new Set(slots.map((x) => x.zone))].map((z) => ({ value: z, label: zoneLabel(z), zone: z, occupant: null, cross: false }))
+        : [...own, ...cross].map((x) => ({ value: x.code, label: x.label, zone: x.zone, occupant: mounted.find((p) => p.slot === x.code)?.code ?? null, cross: x.type_code !== part.type_code }));
       setPlaces(list);
       const free = list.filter((x) => !x.occupant);
       if (free.length === 1) setChoice(free[0].value);
@@ -148,11 +152,12 @@ function MountFlow({ part, ctxDrone, onDone, onCancel }: { part: PartRow; ctxDro
             {places.map((p) => (
               <button key={p.value} type="button" disabled={!!p.occupant} className={`ss-place${choice === p.value ? ' active' : ''}`} onClick={() => setChoice(p.value)}>
                 <strong>{p.label}</strong>
-                <span>{p.occupant ? `occupé · ${p.occupant}` : part.multi ? zoneLabel(p.zone) : 'libre'}</span>
+                <span>{p.occupant ? `occupé · ${p.occupant}` : part.multi ? zoneLabel(p.zone) : p.cross ? 'libre · montage croisé' : 'libre'}</span>
               </button>
             ))}
           </div>
         )}
+        {!part.multi && <MountWarnings partId={part.id} droneId={drone.id} slot={choice || null} />}
         {places && places.length > 0 && places.every((p) => p.occupant) && (
           <div className="fk-note warn"><Icon name="alert" size={14} /> Tous les emplacements sont occupés : scannez la pièce en place et utilisez « Remplacer ».</div>
         )}
@@ -209,9 +214,14 @@ function ReplaceFlow({ part, scanned, onPick, onDone, onCancel }: {
   const { busy, error, run } = useRun(() => onDone(`${part.code} remplacée par ${scanned?.code} (${oldTo === 'quarantaine' ? 'ancienne en quarantaine' : 'ancienne en stock'})`));
   useEffect(() => {
     if (!part.drone_port_id) { setCandidates([]); return; }
-    supabase.from('v_parts').select('*').eq('type_code', part.type_code).eq('status', 'stock').eq('drone_port_id', part.drone_port_id).then(({ data }) => {
-      setCandidates(((data ?? []) as PartRow[]).sort((a, b) => (remainingHours(b) ?? 1e9) - (remainingHours(a) ?? 1e9)));
+    let alive = true;
+    // même type ou type interchangeable (servo d'aileron <-> gouverne)
+    fetchCompatibleTypes(part.type_code).then((types) =>
+      supabase.from('v_parts').select('*').in('type_code', types).eq('status', 'stock').eq('drone_port_id', part.drone_port_id!)
+    ).then(({ data }) => {
+      if (alive) setCandidates(((data ?? []) as PartRow[]).sort((a, b) => (remainingHours(b) ?? 1e9) - (remainingHours(a) ?? 1e9)));
     });
+    return () => { alive = false; };
   }, [part.drone_port_id, part.type_code]);
   const submit = () => {
     if (!scanned) return;
@@ -227,7 +237,9 @@ function ReplaceFlow({ part, scanned, onPick, onDone, onCancel }: {
           <div><span className="pd-kicker">Montée</span><strong>{scanned.code}</strong><PotentialBar part={scanned} compact /></div>
           <button type="button" className="btn btn-sm btn-ghost" onClick={() => onPick(null)}>Changer</button>
         </div>
-      ) : (
+      ) : null}
+      {scanned && <MountWarnings partId={scanned.id} droneId={part.drone_id} slot={part.slot} />}
+      {scanned ? null : (
         <>
           <div className="ss-aim"><Icon name="scan" size={18} /> Scannez l'étiquette de la pièce neuve…</div>
           {candidates && candidates.length > 0 && <>
@@ -361,9 +373,10 @@ export default function Scan() {
       const p = await loadPart(pCode);
       if (!p) { scanFeedback(false); flash({ text: `Pièce ${pCode} introuvable, ou hors de votre drone port.`, tone: 'danger' }); return; }
       if (flow?.kind === 'replace' && part) {
+        const okTypes = p.type_code === part.type_code ? [part.type_code] : await fetchCompatibleTypes(part.type_code);
         const why = p.id === part.id ? 'C\'est la pièce à remplacer : scannez la pièce neuve.'
           : p.status !== 'stock' ? `${p.code} n'est pas en stock (${PART_STATUS[p.status].label.toLowerCase()}).`
-          : p.type_code !== part.type_code ? `${p.code} est un(e) « ${p.type_name} » : il faut « ${part.type_name} ».`
+          : !okTypes.includes(p.type_code) ?`${p.code} est un(e) « ${p.type_name} » : il faut « ${part.type_name} ».`
           : p.drone_port_id !== part.drone_port_id ? `${p.code} est stockée dans un autre drone port.` : null;
         scanFeedback(!why);
         if (why) flash({ text: why, tone: 'warn' }); else setNewPart(p);

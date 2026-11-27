@@ -477,3 +477,38 @@ test.describe('Pièces : potentiel en cycles', () => {
     expect(Number(v.potential_pct)).toBe(100);
   });
 });
+
+test.describe('Pièces : servos d\'aileron et de gouverne interchangeables', () => {
+  test('montage croisé dans les deux sens, autres types refusés, avertissement de marque', async () => {
+    const nord = await as('nord');
+    const create = async (type: string, brand: string | null) => {
+      const [code] = await ok(nord.rpc('create_parts', { p_type: type, p_qty: 1, p_port: fx.ports.nord, p_notes: 'Test automatique' })) as string[];
+      const p = await ok(nord.from('parts').select('id').eq('code', code).single());
+      await ok(nord.from('parts').update({ manufacturer: brand }).eq('id', p.id));
+      return { id: p.id as string, code };
+    };
+    const at = `${today}T00:00:00`;
+    const seg = await create('SEG', 'MarqueA');
+    const sea = await create('SEA', 'MarqueB');
+    const sea2 = await create('SEA', 'MarqueA');
+    // servo de gouverne à sa place
+    await ok(nord.rpc('mount_part', { p_part: seg.id, p_drone: fx.drones.nord, p_slot: 'SEG-G', p_zone: null, p_at: at }));
+    // servo d'aileron sur l'autre gouverne : accepté, avec avertissements (croisé + marque du côté opposé)
+    const w = await ok(nord.rpc('part_mount_warnings', { p_part: sea.id, p_drone: fx.drones.nord, p_slot: 'SEG-D' })) as string[];
+    expect(w.some((x) => x.startsWith('Montage croisé'))).toBe(true);
+    expect(w.some((x) => x.includes('côté opposé') && x.includes('MarqueA') && x.includes('MarqueB'))).toBe(true);
+    await ok(nord.rpc('mount_part', { p_part: sea.id, p_drone: fx.drones.nord, p_slot: 'SEG-D', p_zone: null, p_at: at }));
+    // remplacement croisé dans l'autre sens : un servo d'aileron prend la place du servo de gouverne
+    await ok(nord.rpc('replace_part', { p_old: seg.id, p_new: sea2.id, p_old_to: 'stock', p_at: at, p_reason: 'Test automatique' }));
+    // puis le servo de gouverne va sur un aileron
+    await ok(nord.rpc('mount_part', { p_part: seg.id, p_drone: fx.drones.nord, p_slot: 'SEA-G', p_zone: null, p_at: at }));
+    const mounted = await ok(nord.from('v_parts').select('code, slot, status').in('id', [seg.id, sea.id, sea2.id]));
+    expect(Object.fromEntries(mounted.map((m: { code: string; slot: string }) => [m.code, m.slot])))
+      .toEqual({ [seg.code]: 'SEA-G', [sea.code]: 'SEG-D', [sea2.code]: 'SEG-G' });
+    // un servo ne va pas sur un emplacement d'un autre groupe
+    const sel = await create('SEA', null);
+    expect(await expectError(nord.rpc('mount_part', { p_part: sel.id, p_drone: fx.drones.nord, p_slot: 'SEL', p_zone: null, p_at: at }))).toContain('attend une pièce de type SEL');
+    // démontage pour laisser le drone de test propre
+    for (const p of [seg, sea, sea2]) await ok(nord.rpc('unmount_part', { p_part: p.id, p_to: 'stock', p_at: at, p_reason: null }));
+  });
+});

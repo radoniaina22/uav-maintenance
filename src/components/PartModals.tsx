@@ -1,9 +1,9 @@
-import { FormEvent, ReactNode, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { supabase, unwrap } from '../lib/supabase';
 import { useApp } from '../lib/app';
 import type { PartRow, PartType } from '../lib/types';
 import { hours, num, toNum, toStr, type Level } from '../lib/format';
-import { cycles, nowLocal, pctLevel, potentialLevel, remainingCycles, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
+import { cycles, fetchMountWarnings, nowLocal, pctLevel, potentialLevel, remainingCycles, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
 import { ErrorBox, Field, Modal, PortSelect, Progress } from './ui';
 import { Icon } from './icons';
 import { ChoiceCards, ContextBanner, FormSection, QuickChips, RouteView } from './FormKit';
@@ -95,7 +95,23 @@ function ZoneSpot({ zone }: { zone: string | null }) {
   );
 }
 
-function CandidateList({ candidates, value, onChange, empty }: { candidates: PartRow[]; value: string; onChange: (id: string) => void; empty: ReactNode }) {
+/** Avertissements non bloquants (montage croisé, marque différente…) pour la pièce choisie */
+export function MountWarnings({ partId, droneId, slot }: { partId: string | null | undefined; droneId: string | null | undefined; slot: string | null | undefined }) {
+  const [list, setList] = useState<string[]>([]);
+  useEffect(() => {
+    setList([]);
+    if (!partId || !droneId || !slot) return;
+    let alive = true;
+    fetchMountWarnings(partId, droneId, slot).then((w) => { if (alive) setList(w); });
+    return () => { alive = false; };
+  }, [partId, droneId, slot]);
+  if (!list.length) return null;
+  return <>{list.map((w) => <div key={w} className="fk-note warn"><Icon name="alert" size={14} /> {w}</div>)}</>;
+}
+
+function CandidateList({ candidates, value, onChange, empty, slotType }: {
+  candidates: PartRow[]; value: string; onChange: (id: string) => void; empty: ReactNode; slotType?: string;
+}) {
   if (!candidates.length) return <div className="alert alert-warn">{empty}</div>;
   // les pièces avec le plus de potentiel restant en premier
   const sorted = [...candidates].sort((a, b) => (remainingHours(b) ?? 1e9) - (remainingHours(a) ?? 1e9) || a.code.localeCompare(b.code));
@@ -109,7 +125,8 @@ function CandidateList({ candidates, value, onChange, empty }: { candidates: Par
             <div className="pick-body">
               <div className="row-between"><strong>{p.code}</strong>
                 {lvl === 'danger' ? <span className="text-danger small">potentiel dépassé</span> : i === 0 && sorted.length > 1 ? <span className="fk-best">★ plus de potentiel</span> : null}</div>
-              <div className="small muted">{p.serial_number ? `S/N ${p.serial_number}` : 'Sans n° de série'}{p.manufacturer ? ` · ${p.manufacturer}` : ''}</div>
+              <div className="small muted">{p.serial_number ? `S/N ${p.serial_number}` : 'Sans n° de série'}{p.manufacturer ? ` · ${p.manufacturer}` : ''}
+                {slotType && p.type_code !== slotType && <span className="text-warn"> · {p.type_name} (montage croisé)</span>}</div>
               <PotentialBar part={p} compact />
             </div>
           </label>
@@ -122,8 +139,8 @@ function CandidateList({ candidates, value, onChange, empty }: { candidates: Par
 // ---------------------------------------------------------------------
 // Monter une pièce (emplacement précis, ou zone pour connecteurs / fils)
 // ---------------------------------------------------------------------
-export function MountModal({ droneId, droneCode, slot, slotLabel, zone, typeName, candidates, onClose, onDone }: {
-  droneId: string; droneCode: string; slot: string | null; slotLabel: string; zone: string; typeName: string;
+export function MountModal({ droneId, droneCode, slot, slotLabel, zone, typeName, slotType, candidates, onClose, onDone }: {
+  droneId: string; droneCode: string; slot: string | null; slotLabel: string; zone: string; typeName: string; slotType?: string;
   candidates: PartRow[]; onClose: () => void; onDone: () => void;
 }) {
   const sortedFirst = [...candidates].sort((a, b) => (remainingHours(b) ?? 1e9) - (remainingHours(a) ?? 1e9))[0];
@@ -144,8 +161,9 @@ export function MountModal({ droneId, droneCode, slot, slotLabel, zone, typeName
           <div><span className="pd-kicker">{droneCode} · {zoneLabel(zone)}</span><strong>{slotLabel}</strong><span className="small muted">{typeName}</span></div>
         </div>
         <FormSection n={1} icon="box" title="Pièce à monter" hint={`${candidates.length} en stock dans ce drone port`}>
-          <CandidateList candidates={candidates} value={partId} onChange={setPartId}
+          <CandidateList candidates={candidates} value={partId} onChange={setPartId} slotType={slotType}
             empty={<>Aucune pièce « {typeName} » en stock dans ce drone port. Faites d'abord une <strong>entrée en stock</strong> ou un transfert.</>} />
+          <MountWarnings partId={partId} droneId={droneId} slot={slot} />
         </FormSection>
         <FormSection n={2} icon="clock" title="Montage">
           <div className="form-grid">
@@ -229,8 +247,9 @@ export function ReplaceModal({ part, candidates, onClose, onDone }: { part: Part
           {chosen ? <PartChip p={chosen} label="Montée" /> : <div className="fk-part empty"><span className="pd-kicker">Montée</span><span className="small muted">choisissez une pièce ci-dessous</span></div>}
         </div>
         <FormSection n={1} icon="box" title={`Nouvelle pièce (${part.type_name}, en stock)`}>
-          <CandidateList candidates={candidates} value={newId} onChange={setNewId}
+          <CandidateList candidates={candidates} value={newId} onChange={setNewId} slotType={part.type_code}
             empty={<>Aucune pièce « {part.type_name} » en stock dans ce drone port.</>} />
+          <MountWarnings partId={newId} droneId={part.drone_id} slot={part.slot} />
         </FormSection>
         <FormSection n={2} icon="alert" title={`Que devient ${part.code} ?`}>
           <ChoiceCards label="Destination de l'ancienne pièce" value={oldTo} onChange={setOldTo} options={[

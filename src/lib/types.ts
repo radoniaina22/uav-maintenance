@@ -32,6 +32,8 @@ export interface PartType {
   multi: boolean;
   sort: number;
   active: boolean;
+  /** Groupe d'interchangeabilité : les types du même groupe se montent l'un à la place de l'autre */
+  swap_group: string | null;
 }
 
 export interface DroneSlot {

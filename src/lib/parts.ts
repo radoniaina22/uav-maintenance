@@ -1,5 +1,6 @@
 import type { Level } from './format';
-import type { PartEventRow, PartRow, PartStatus } from './types';
+import { supabase } from './supabase';
+import type { PartEventRow, PartRow, PartStatus, PartType } from './types';
 
 /** Zones cliquables sur la photo du Tango 4 (positions en % de l'image public/tango4.png).
  *  La photo montre le drone vu de face : gauche / droite s'entendent pour un pilote placé
@@ -58,6 +59,28 @@ export const cycles = (n: number | null | undefined) => (n == null ? '—' : `${
 
 export const remainingHours = (p: Pick<PartRow, 'total_hours' | 'max_hours_effective'>) =>
   p.max_hours_effective == null ? null : Number(p.max_hours_effective) - Number(p.total_hours);
+
+/** Types montables sur un emplacement de type `slotType` : lui-même et les types du même
+ *  groupe d'interchangeabilité (`part_types.swap_group`, ex. servo d'aileron <-> servo de gouverne).
+ *  La règle est vérifiée en base par `mount_part`. */
+export function compatibleTypes(types: Pick<PartType, 'code' | 'swap_group'>[], slotType: string): string[] {
+  const group = types.find((t) => t.code === slotType)?.swap_group;
+  if (!group) return [slotType];
+  return [slotType, ...types.filter((t) => t.swap_group === group && t.code !== slotType).map((t) => t.code)];
+}
+
+/** Même calcul en chargeant les types depuis la base */
+export async function fetchCompatibleTypes(slotType: string): Promise<string[]> {
+  const { data } = await supabase.from('part_types').select('code, swap_group');
+  return compatibleTypes((data ?? []) as Pick<PartType, 'code' | 'swap_group'>[], slotType);
+}
+
+/** Avertissements non bloquants avant un montage (montage croisé, marque différente…) */
+export async function fetchMountWarnings(partId: string, droneId: string, slot: string | null): Promise<string[]> {
+  if (!slot) return [];
+  const { data } = await supabase.rpc('part_mount_warnings', { p_part: partId, p_drone: droneId, p_slot: slot });
+  return (data ?? []) as string[];
+}
 
 /** Valeur par défaut d'un champ datetime-local : maintenant, heure locale */
 export const nowLocal = () => {

@@ -277,10 +277,15 @@ export default function FlightForm() {
     }
     const b1 = refs.data.batteries.find((b) => b.id === form.battery_1_id);
     const b2 = refs.data.batteries.find((b) => b.id === form.battery_2_id);
+    // Capacité initiale (nominale) du pack, toujours affichée, et capacité réelle d'après
+    // le dernier relevé de chaque batterie (la nominale à défaut de relevé) : le % consommé
+    // se calcule sur la capacité réelle.
     const capacity = (b1?.capacity_mah ?? 0) + (b2?.capacity_mah ?? 0);
+    const realCapacity = [b1, b2].reduce((s, b) => s + (b ? Number(b.last_measured_mah ?? b.capacity_mah) : 0), 0);
+    const measured = [b1, b2].some((b) => b?.last_measured_mah != null);
     const conso = toNum(form.consumption_mah);
-    const consoPct = capacity && conso != null ? (conso / capacity) * 100 : null;
-    if (consoPct != null && consoPct > 100) warnings.push('Consommation supérieure à la capacité du pack batteries.');
+    const consoPct = realCapacity && conso != null ? (conso / realCapacity) * 100 : null;
+    if (consoPct != null && consoPct > 100) warnings.push('Consommation supérieure à la capacité réelle du pack batteries.');
     if (b1 && b2 && b1.capacity_mah !== b2.capacity_mah) warnings.push('Les deux batteries en parallèle ont des capacités différentes.');
     if (form.battery_pack_id && (!b1 || !b2)) warnings.push("Le pack sélectionné n'a pas ses deux batteries (A et B).");
     for (const b of [b1, b2]) {
@@ -308,7 +313,7 @@ export default function FlightForm() {
     const drone = refs.data.drones.find((d) => d.id === form.drone_id);
     if (drone && drone.status !== 'operationnel') warnings.push(`Le drone ${drone.code} n'est pas marqué opérationnel.`);
     if (drone && !drone.drone_port_id) warnings.push(`Le drone ${drone.code} n'est affecté à aucun drone port : le vol ne sera visible que des administrateurs.`);
-    return { duration, capacity, consoPct, warnings };
+    return { duration, capacity, realCapacity, measured, consoPct, warnings };
   }, [form, refs.data, editing]);
 
   async function submit(e: FormEvent) {
@@ -503,7 +508,8 @@ export default function FlightForm() {
           <div className="ff-energy-txt">
             <span className="ff-kicker">Énergie</span>
             <strong>{form.consumption_mah ? `${num(toNum(form.consumption_mah), 0)} mAh` : '— mAh'}</strong>
-            <span className="small muted">{pack ? `Pack ${pack.pack_number}` : 'Aucun pack'}{derived?.capacity ? ` · ${num(derived.capacity, 0)} mAh` : ''}</span>
+            <span className="small muted">{pack ? `Pack ${pack.pack_number}` : 'Aucun pack'}{derived?.capacity ? ` · initiale ${num(derived.capacity, 0)} mAh` : ''}</span>
+            {derived?.measured ? <span className="small muted">Réelle {num(derived.realCapacity, 0)} mAh (dernier relevé)</span> : null}
           </div>
         </div>
         <div className="ff-volts">
@@ -778,9 +784,32 @@ export default function FlightForm() {
             {!form.battery_pack_id && (b1 || b2) && <span className="field-hint">Saisie antérieure sans pack</span>}
           </div>
           <div className="computed">
+            <span className="field-label">État de santé</span>
+            <strong>
+              {b1 || b2 ? [b1, b2].map((b, i) => (
+                <span key={i}>
+                  {i > 0 && ' · '}
+                  {b ? <span className={`text-${healthLevel(b.health_pct)}`}>{batteryCode(b)} {b.health_pct != null ? `${num(b.health_pct)} %` : '—'}</span> : '—'}
+                </span>
+              )) : '—'}
+            </strong>
+            {b1 || b2 ? (
+              <span className="field-hint">
+                {[b1, b2].filter((b): b is BatteryStatusRow => Boolean(b)).map((b) => b.last_test_date
+                  ? `${batteryCode(b)} : ${num(b.last_measured_mah, 0)} mAh le ${date(b.last_test_date)}`
+                  : `${batteryCode(b)} : aucun relevé`).join(' · ')}
+              </span>
+            ) : null}
+          </div>
+          <div className="computed">
             <span className="field-label">% du pack</span>
             <strong>{derived?.consoPct != null ? `${num(derived.consoPct)} %` : '—'}</strong>
-            {derived?.capacity ? <span className="field-hint">Capacité nominale : {num(derived.capacity, 0)} mAh</span> : null}
+            {derived?.capacity ? (
+              <span className="field-hint">
+                Capacité initiale : {num(derived.capacity, 0)} mAh
+                {derived.measured ? ` · réelle (dernier relevé) : ${num(derived.realCapacity, 0)} mAh` : ' · aucun relevé, calcul sur la capacité initiale'}
+              </span>
+            ) : null}
           </div>
           <VoltageField label="Tension de départ" kind="start" value={form.voltage_start_v} onChange={(v) => set('voltage_start_v', v)} />
           <VoltageField label="Tension d'arrivée" kind="end" value={form.voltage_end_v} onChange={(v) => set('voltage_end_v', v)} />
