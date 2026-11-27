@@ -27,6 +27,8 @@ export interface PartType {
   category: string;
   name: string;
   default_max_hours: number | null;
+  /** Potentiel par défaut en cycles (1 cycle = 1 décollage + 1 atterrissage) */
+  default_max_cycles: number | null;
   multi: boolean;
   sort: number;
   active: boolean;
@@ -53,6 +55,9 @@ export interface PartRow {
   drone_port_id: string | null;
   initial_hours: number;
   max_hours: number | null;
+  /** Cycles avant suivi / potentiel propre en cycles */
+  initial_cycles: number;
+  max_cycles: number | null;
   acquired_on: string | null;
   notes: string | null;
   created_at: string;
@@ -60,6 +65,7 @@ export interface PartRow {
   type_name: string;
   multi: boolean;
   max_hours_effective: number | null;
+  max_cycles_effective: number | null;
   drone_id: string | null;
   drone_code: string | null;
   slot: string | null;
@@ -69,6 +75,11 @@ export interface PartRow {
   drone_port_name: string | null;
   flight_count: number;
   total_hours: number;
+  /** 1 vol effectué pendant le montage = 1 cycle */
+  total_cycles: number;
+  hours_pct: number | null;
+  cycle_pct: number | null;
+  /** Le plus élevé des pourcentages heures / cycles */
   potential_pct: number | null;
 }
 

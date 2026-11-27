@@ -4,7 +4,7 @@ import { fetchAll, supabase, unwrap } from '../lib/supabase';
 import { useData } from '../lib/useData';
 import type { PartEventRow, PartInstallationRow, PartRow } from '../lib/types';
 import { date, hours, num } from '../lib/format';
-import { dateTime, PART_EVENT, PART_STATUS, potentialLevel, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
+import { cycles, dateTime, PART_EVENT, PART_STATUS, potentialLevel, remainingCycles, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
 import { addDays, daysBetween, iso, parseIso } from '../lib/stats';
 import { FORECAST_WINDOW_DAYS, projection } from '../lib/dashboard';
 import { Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
@@ -20,10 +20,11 @@ const STATUS_ICON: Record<PartRow['status'], IconName> = { monte: 'drone', stock
 /** couleurs des segments du compteur de carrière (un par drone) */
 const SEG_COLORS = ['#3987e5', '#d95926', '#199e70', '#c084fc', '#f5b83d', '#5fb3c9'];
 
-/** Jauge circulaire du potentiel consommé */
+/** Jauge circulaire du potentiel consommé (heures, ou cycles quand ce sont eux qui limitent) */
 function LifeRing({ p }: { p: PartRow }) {
   const lvl = potentialLevel(p);
-  const rest = remainingHours(p);
+  const byCycles = p.cycle_pct != null && (p.hours_pct == null || Number(p.cycle_pct) > Number(p.hours_pct));
+  const rest = byCycles ? remainingCycles(p) : remainingHours(p);
   const pct = p.potential_pct == null ? 0 : Math.min(100, Number(p.potential_pct));
   const R = 58, C = 2 * Math.PI * R;
   return (
@@ -34,6 +35,8 @@ function LifeRing({ p }: { p: PartRow }) {
       </svg>
       <div className="lr-center">
         {rest == null ? <><strong>{hours(p.total_hours)}</strong><span>potentiel à définir</span></>
+          : byCycles ? (rest <= 0 ? <><strong>Dépassé</strong><span>de {cycles(-rest)}</span></>
+            : <><strong>{num(rest, 0)}</strong><span>cycles restants · {num(p.potential_pct, 0)} %</span></>)
           : rest <= 0 ? <><strong>Dépassé</strong><span>de {hours(-rest)}</span></>
           : <><strong>{num(rest, rest < 10 ? 1 : 0)} h</strong><span>restantes · {num(p.potential_pct, 0)} %</span></>}
       </div>
@@ -134,7 +137,11 @@ export default function PartDetail() {
             {p.legacy_code && <div><dt>Ancien code</dt><dd className="mono">{p.legacy_code}</dd></div>}
             <div><dt>N° de série</dt><dd>{p.serial_number ?? '—'}</dd></div>
             <div><dt>Fabricant</dt><dd>{p.manufacturer ?? '—'}</dd></div>
-            <div><dt>Potentiel</dt><dd>{p.max_hours_effective != null ? <>{hours(p.max_hours_effective)} <small>{p.max_hours != null ? 'propre à la pièce' : 'du type'}</small></> : <span className="text-warn">à définir</span>}</dd></div>
+            <div><dt>Potentiel</dt><dd>{p.max_hours_effective == null && p.max_cycles_effective == null ? <span className="text-warn">à définir</span> : <>
+              {p.max_hours_effective != null && <>{hours(p.max_hours_effective)} <small>{p.max_hours != null ? 'propre à la pièce' : 'du type'}</small></>}
+              {p.max_hours_effective != null && p.max_cycles_effective != null && ' · '}
+              {p.max_cycles_effective != null && <>{cycles(p.max_cycles_effective)} <small>{p.max_cycles != null ? 'propre à la pièce' : 'du type'}</small></>}
+            </>}</dd></div>
           </dl>
         </div>
 
@@ -182,7 +189,7 @@ export default function PartDetail() {
         <div className="fk"><span className="fk-icon"><Icon name="clock" size={18} /></span>
           <div><strong>{hours(p.total_hours)}</strong><span>de vol · dont {hours(p.initial_hours)} avant suivi</span></div></div>
         <div className="fk"><span className="fk-icon"><Icon name="flight" size={18} /></span>
-          <div><strong>{p.flight_count}</strong><span>vol(s) suivi(s) · {new Set(installations.map((i) => i.drone_code)).size} drone(s)</span></div></div>
+          <div><strong>{cycles(p.total_cycles)}</strong><span>{p.flight_count} vol(s) suivi(s){Number(p.initial_cycles) > 0 ? ` · ${p.initial_cycles} avant suivi` : ''} · {new Set(installations.map((i) => i.drone_code)).size} drone(s)</span></div></div>
         <div className={`fk${forecast ? (forecast.days <= 7 ? ' fk-danger' : forecast.days <= 30 ? ' fk-warn' : ' fk-ok') : ''}`}>
           <span className="fk-icon"><Icon name="bell" size={18} /></span>
           <div>

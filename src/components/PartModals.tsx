@@ -2,27 +2,44 @@ import { FormEvent, ReactNode, useState } from 'react';
 import { supabase, unwrap } from '../lib/supabase';
 import { useApp } from '../lib/app';
 import type { PartRow, PartType } from '../lib/types';
-import { hours, num, toNum, toStr } from '../lib/format';
-import { nowLocal, potentialLevel, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
+import { hours, num, toNum, toStr, type Level } from '../lib/format';
+import { cycles, nowLocal, pctLevel, potentialLevel, remainingCycles, remainingHours, TANGO4_ZONES, zoneLabel } from '../lib/parts';
 import { ErrorBox, Field, Modal, PortSelect, Progress } from './ui';
 import { Icon } from './icons';
 import { ChoiceCards, ContextBanner, FormSection, QuickChips, RouteView } from './FormKit';
 import { GaugeRing } from './BatteryVisuals';
 
-/** Barre de potentiel : heures consommées / potentiel */
-export function PotentialBar({ part, compact }: { part: Pick<PartRow, 'total_hours' | 'max_hours_effective' | 'potential_pct'>; compact?: boolean }) {
-  const lvl = potentialLevel(part);
-  if (lvl === 'unknown') {
-    return <div className="small muted">{hours(part.total_hours)} · <span className="text-warn">potentiel à définir</span></div>;
+type PotentialPart = Pick<PartRow, 'total_hours' | 'max_hours_effective' | 'potential_pct'>
+  & Partial<Pick<PartRow, 'total_cycles' | 'max_cycles_effective' | 'hours_pct' | 'cycle_pct'>>;
+
+/** Barre de potentiel : heures consommées / potentiel, et cycles / potentiel en cycles s'il est défini */
+export function PotentialBar({ part, compact }: { part: PotentialPart; compact?: boolean }) {
+  const hasHours = part.max_hours_effective != null;
+  const hasCycles = part.max_cycles_effective != null && part.total_cycles != null;
+  if (!hasHours && !hasCycles) {
+    return <div className="small muted">{hours(part.total_hours)}{part.total_cycles != null ? ` · ${cycles(part.total_cycles)}` : ''} · <span className="text-warn">potentiel à définir</span></div>;
   }
-  const rest = remainingHours(part)!;
+  const restH = remainingHours(part);
+  const restC = hasCycles ? remainingCycles(part as Pick<PartRow, 'total_cycles' | 'max_cycles_effective'>) : null;
+  const hPct = part.hours_pct ?? (hasHours ? (100 * Number(part.total_hours)) / Number(part.max_hours_effective) : null);
+  const cPct = part.cycle_pct ?? (hasCycles ? (100 * Number(part.total_cycles)) / Number(part.max_cycles_effective) : null);
   return (
     <div className="potential">
-      <div className="row-between small">
-        <span>{hours(part.total_hours)} / {hours(part.max_hours_effective)}</span>
-        <strong className={`text-${lvl}`}>{rest <= 0 ? `dépassé de ${hours(-rest)}` : compact ? `${num(part.potential_pct)} %` : `reste ${hours(rest)}`}</strong>
-      </div>
-      <Progress value={Number(part.total_hours)} max={Number(part.max_hours_effective)} level={lvl} />
+      {hasHours && restH != null && <>
+        <div className="row-between small">
+          <span>{hours(part.total_hours)} / {hours(part.max_hours_effective)}</span>
+          <strong className={`text-${pctLevel(hPct)}`}>{restH <= 0 ? `dépassé de ${hours(-restH)}` : compact ? `${num(hPct)} %` : `reste ${hours(restH)}`}</strong>
+        </div>
+        <Progress value={Number(part.total_hours)} max={Number(part.max_hours_effective)} level={pctLevel(hPct) as Level} />
+      </>}
+      {hasCycles && restC != null && <>
+        <div className="row-between small">
+          <span>{num(part.total_cycles, 0)} / {cycles(part.max_cycles_effective)}</span>
+          <strong className={`text-${pctLevel(cPct)}`}>{restC <= 0 ? `dépassé de ${cycles(-restC)}` : compact ? `${num(cPct)} %` : `reste ${cycles(restC)}`}</strong>
+        </div>
+        <Progress value={Number(part.total_cycles)} max={Number(part.max_cycles_effective)} level={pctLevel(cPct) as Level} />
+      </>}
+      {!hasCycles && part.total_cycles != null && !compact && <div className="small muted">{cycles(part.total_cycles)}</div>}
     </div>
   );
 }
@@ -427,6 +444,7 @@ export function EditPartModal({ part, onClose, onDone }: { part: PartRow; onClos
   const [f, setF] = useState({
     serial_number: part.serial_number ?? '', manufacturer: part.manufacturer ?? '',
     initial_hours: String(part.initial_hours), max_hours: part.max_hours?.toString() ?? '',
+    initial_cycles: String(part.initial_cycles ?? 0), max_cycles: part.max_cycles?.toString() ?? '',
     acquired_on: part.acquired_on ?? '', notes: part.notes ?? '',
   });
   const { error, busy, run } = useAction(onDone);
@@ -435,7 +453,8 @@ export function EditPartModal({ part, onClose, onDone }: { part: PartRow; onClos
     e.preventDefault();
     run(async () => unwrap(await supabase.from('parts').update({
       serial_number: toStr(f.serial_number), manufacturer: toStr(f.manufacturer), initial_hours: toNum(f.initial_hours) ?? 0,
-      max_hours: toNum(f.max_hours), acquired_on: toStr(f.acquired_on), notes: toStr(f.notes),
+      max_hours: toNum(f.max_hours), initial_cycles: Math.round(toNum(f.initial_cycles) ?? 0), max_cycles: toNum(f.max_cycles),
+      acquired_on: toStr(f.acquired_on), notes: toStr(f.notes),
     }).eq('id', part.id).select()));
   };
 
@@ -447,7 +466,13 @@ export function EditPartModal({ part, onClose, onDone }: { part: PartRow; onClos
   const total = flown + (toNum(f.initial_hours) ?? 0);
   const pct = potential ? (100 * total) / Number(potential) : null;
   const lvl = pct == null ? 'unknown' : pct >= 100 ? 'danger' : pct >= 90 ? 'warn' : 'ok';
-  const changed = total !== Number(part.total_hours) || (potential ?? null) !== (part.max_hours_effective ?? null);
+  // cycles : 1 vol suivi = 1 cycle (décollage + atterrissage)
+  const typeCycles = part.max_cycles == null ? part.max_cycles_effective : null;
+  const potentialC = toNum(f.max_cycles) ?? typeCycles;
+  const flownC = Number(part.total_cycles) - Number(part.initial_cycles ?? 0);
+  const totalC = flownC + Math.round(toNum(f.initial_cycles) ?? 0);
+  const changed = total !== Number(part.total_hours) || (potential ?? null) !== (part.max_hours_effective ?? null)
+    || totalC !== Number(part.total_cycles) || (potentialC ?? null) !== (part.max_cycles_effective ?? null);
 
   return (
     <Modal title={`Modifier ${part.code}`} onClose={onClose} footer={<Footer form="edit-part" busy={busy} onClose={onClose} label="Enregistrer" />}>
@@ -470,6 +495,14 @@ export function EditPartModal({ part, onClose, onDone }: { part: PartRow; onClos
               {f.max_hours.trim() !== '' && <Field label="Potentiel propre (h)" required><input type="number" step="1" min="1" required value={f.max_hours} onChange={(e) => set('max_hours', e.target.value)} /></Field>}
             </div>
           </FormSection>
+          <FormSection n={3} icon="flight" title="Cycles" hint="1 cycle = 1 décollage + 1 atterrissage, compté à chaque vol pendant le montage">
+            <div className="form-grid">
+              <Field label="Cycles avant suivi" hint="cycles effectués avant l'utilisation du logiciel"><input type="number" step="1" min="0" value={f.initial_cycles} onChange={(e) => set('initial_cycles', e.target.value)} /></Field>
+              <Field label="Potentiel propre (cycles)" hint={typeCycles ? `vide = potentiel du type (${num(typeCycles, 0)} cycles)` : 'vide = potentiel du type (non défini)'}>
+                <input type="number" step="1" min="1" value={f.max_cycles} onChange={(e) => set('max_cycles', e.target.value)} />
+              </Field>
+            </div>
+          </FormSection>
           <Field label="Notes" wide><textarea rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
           <ErrorBox error={error} />
         </form>
@@ -484,6 +517,7 @@ export function EditPartModal({ part, onClose, onDone }: { part: PartRow; onClos
           <div className="fk-kv"><span>Heures totales</span><b>{hours(total)}</b></div>
           <div className="fk-kv"><span>dont vols suivis</span><b>{hours(flown)}</b></div>
           <div className="fk-kv"><span>Potentiel</span><b>{potential ? `${num(potential)} h` : '—'}</b></div>
+          <div className="fk-kv"><span>Cycles</span><b>{num(totalC, 0)}{potentialC ? ` / ${num(potentialC, 0)}` : ''}</b></div>
           {changed && <div className="fk-note info"><Icon name="bolt" size={14} /> Avant : {hours(part.total_hours)}{part.max_hours_effective ? ` / ${num(part.max_hours_effective)} h` : ''}. Les alertes et prévisions seront recalculées.</div>}
         </aside>
       </div>

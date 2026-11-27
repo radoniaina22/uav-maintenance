@@ -27,6 +27,10 @@ export async function cleanE2E(sql: postgres.Sql) {
     await tx`delete from battery_transfers where battery_id in (select b.id from batteries b join drone_ports p on p.id = b.drone_port_id where p.name in ('E2E Nord', 'E2E Sud'))`;
     await tx`delete from batteries where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
     await tx`delete from battery_packs where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
+    // pièces créées par les tests sur les drone ports E2E
+    await tx`delete from part_installations where part_id in (select id from parts where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud')))`;
+    await tx`delete from part_events where part_id in (select id from parts where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud')))`;
+    await tx`delete from parts where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
     await tx`delete from flight_plans where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
     await tx`delete from live_flights where drone_port_id in (select id from drone_ports where name in ('E2E Nord', 'E2E Sud'))`;
     // rapports mensuels validés par les tests (mois de 2001, jamais utilisés par de vraies données)

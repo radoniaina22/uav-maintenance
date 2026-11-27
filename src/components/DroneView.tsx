@@ -41,7 +41,7 @@ export default function DroneView({ zones, selected, onSelect }: { zones: ZoneSu
   return (
     <div>
       <div className="drone-view">
-        <img src="./tango4.png" alt="Drone Tango 4 vu de dessus" draggable={false} />
+        <img src="./tango4.png" alt="Drone Tango 4 vu de face (gauche / droite côté pilote, derrière le drone)" draggable={false} />
         {zones.map((z) => {
           const pos = TANGO4_ZONES.find((t) => t.code === z.code)!;
           return (

@@ -30,7 +30,7 @@ const FIELDS: Record<string, string> = {
   observation: 'Observation', work_done: 'Travaux réalisés', title: 'Titre', kind: 'Nature', priority: 'Priorité', due_date: 'Échéance',
   visit_type: 'Type de visite', visit_date: 'Date de visite', hours_at_visit: 'Compteur (h)', technician: 'Technicien',
   serial_number: 'N° de série', license_number: 'Licence', initial_flight_minutes: 'Minutes antérieures', initial_hours: 'Heures antérieures',
-  max_hours: 'Potentiel (h)', default_max_hours: 'Potentiel du type (h)', min_qty: 'Minimum', max_cycles: 'Cycles max', initial_cycles: 'Cycles initiaux',
+  max_hours: 'Potentiel (h)', default_max_hours: 'Potentiel du type (h)', default_max_cycles: 'Potentiel du type (cycles)', min_qty: 'Minimum', max_cycles: 'Cycles max', initial_cycles: 'Cycles initiaux',
   capacity_mah: 'Capacité (mAh)', measured_mah: 'Capacité mesurée', pack_id: 'Pack', position: 'Position', latitude: 'Latitude', longitude: 'Longitude',
   category: 'Catégorie', signer_name: 'Signataire', resolved_on: 'Résolu le', resolved_by_name: 'Clôturé par', visit_interval_hours: 'Intervalle visite (h)',
   model: 'Modèle', manufacturer: 'Fabricant', voltage_start_v: 'Tension départ', voltage_end_v: 'Tension arrivée', closed_at: 'Clôturé le',

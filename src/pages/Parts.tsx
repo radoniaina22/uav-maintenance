@@ -5,7 +5,7 @@ import { byPort, useApp } from '../lib/app';
 import { useData } from '../lib/useData';
 import type { Drone, DroneSlot, PartEventRow, PartRow, PartType, StockThreshold } from '../lib/types';
 import { hours, num } from '../lib/format';
-import { dateTime, PART_EVENT, PART_STATUS, potentialLevel, POTENTIAL_WARN_PCT, remainingHours, zoneLabel } from '../lib/parts';
+import { dateTime, PART_EVENT, PART_STATUS, potentialLevel, POTENTIAL_WARN_PCT, remainingCycles, remainingHours, zoneLabel } from '../lib/parts';
 import { addDays, daysBetween, download, iso, parseIso, toCsv } from '../lib/stats';
 import { FORECAST_WINDOW_DAYS, projection } from '../lib/dashboard';
 import { Badge, Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
@@ -30,6 +30,7 @@ const HORIZON_DAYS = 90;
 const SOON_DAYS = 30;
 
 /** Échéance d'une pièce montée : heures restantes et date estimée au rythme du drone */
+/** rest : reste en heures ou en cycles (selon le potentiel qui arrive en premier) */
 interface Due { part: PartRow; rest: number; perDay: number; days: number | null; date: string | null }
 
 const fmtDay = (s: string) => parseIso(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
@@ -78,12 +79,25 @@ export default function Parts() {
       !mounted.some((p) => p.drone_id === d.id && p.slot === s.code)).length, 0);
     // rythme de vol de chaque drone (h/jour sur 30 jours)
     const perDay = new Map<string, number>();
-    for (const f of data.flights) perDay.set(f.drone_id, (perDay.get(f.drone_id) ?? 0) + Number(f.duration_min ?? 0) / 60 / FORECAST_WINDOW_DAYS);
-    const dues: Due[] = mounted.filter((p) => p.max_hours_effective != null).map((p) => {
-      const rest = remainingHours(p)!;
-      const pd = perDay.get(p.drone_id!) ?? 0;
-      const proj = projection(rest, pd);
-      return { part: p, rest, perDay: pd, days: proj?.days ?? null, date: proj?.date ?? null };
+    const cyclesPerDay = new Map<string, number>(); // 1 vol = 1 cycle
+    for (const f of data.flights) {
+      perDay.set(f.drone_id, (perDay.get(f.drone_id) ?? 0) + Number(f.duration_min ?? 0) / 60 / FORECAST_WINDOW_DAYS);
+      cyclesPerDay.set(f.drone_id, (cyclesPerDay.get(f.drone_id) ?? 0) + 1 / FORECAST_WINDOW_DAYS);
+    }
+    // échéance = la plus proche entre le potentiel en heures et celui en cycles
+    const dues: Due[] = mounted.filter((p) => p.max_hours_effective != null || p.max_cycles_effective != null).map((p) => {
+      const byHours = p.max_hours_effective == null ? null : (() => {
+        const rest = remainingHours(p)!, pd = perDay.get(p.drone_id!) ?? 0, proj = projection(rest, pd);
+        return { part: p, rest, perDay: pd, days: proj?.days ?? null, date: proj?.date ?? null };
+      })();
+      const byCycles = p.max_cycles_effective == null ? null : (() => {
+        const rest = remainingCycles(p)!, pd = cyclesPerDay.get(p.drone_id!) ?? 0, proj = projection(rest, pd);
+        return { part: p, rest, perDay: pd, days: proj?.days ?? null, date: proj?.date ?? null };
+      })();
+      if (!byHours || !byCycles) return (byHours ?? byCycles)!;
+      if (byCycles.rest <= 0) return byCycles;
+      if (byHours.rest <= 0) return byHours;
+      return (byCycles.days ?? 1e9) < (byHours.days ?? 1e9) ? byCycles : byHours;
     }).sort((a, b) => (a.days ?? 1e9) - (b.days ?? 1e9) || a.rest - b.rest);
     const dueById = new Map(dues.map((d) => [d.part.id, d]));
     const soon = dues.filter((d) => d.days != null && d.days > 0 && d.days <= SOON_DAYS);
@@ -738,6 +752,7 @@ function QuarantineTab({ parts, setModal }: { parts: PartRow[]; setModal: (m: Mo
                 <div><dt>Depuis</dt><dd>{ev ? dateTime(ev.at) : '—'}</dd></div>
                 <div><dt>Provenance</dt><dd>{ev?.drone_code ? `${ev.drone_code} · ${ev.slot ?? ''}` : '—'}</dd></div>
                 <div><dt>Heures</dt><dd>{hours(p.total_hours)}{p.max_hours_effective != null ? ` / ${hours(p.max_hours_effective)}` : ''}</dd></div>
+                <div><dt>Cycles</dt><dd>{num(p.total_cycles, 0)}{p.max_cycles_effective != null ? ` / ${num(p.max_cycles_effective, 0)}` : ''}</dd></div>
                 <div><dt>Drone port</dt><dd>{p.drone_port_name ?? '—'}</dd></div>
               </dl>
               <div className="quar-actions">
@@ -807,34 +822,50 @@ function TypesTab({ types, parts, isAdmin, onChanged }: { types: PartType[]; par
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
-  async function save(code: string) {
-    const v = edit[code];
+  // clé d'édition : « MOV:h » (potentiel en heures) ou « MOV:c » (potentiel en cycles)
+  async function save(key: string) {
+    const v = edit[key];
     if (v == null) return;
+    const [code, unit] = key.split(':');
     setError(null);
     try {
       const n = v.trim() === '' ? null : Math.max(1, Number(v.replace(',', '.')));
-      unwrap(await supabase.from('part_types').update({ default_max_hours: n }).eq('code', code).select());
-      setEdit((e) => { const c = { ...e }; delete c[code]; return c; });
-      setSaved(code);
+      unwrap(await supabase.from('part_types').update(unit === 'c' ? { default_max_cycles: n == null ? null : Math.round(n) } : { default_max_hours: n }).eq('code', code).select());
+      setEdit((e) => { const c = { ...e }; delete c[key]; return c; });
+      setSaved(key);
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
 
-  const undef = types.filter((t) => t.active && t.default_max_hours == null).length;
+  const undef = types.filter((t) => t.active && t.default_max_hours == null && t.default_max_cycles == null).length;
+  const potInput = (t: PartType, unit: 'h' | 'c') => {
+    const key = `${t.code}:${unit}`;
+    const cur = unit === 'h' ? t.default_max_hours : t.default_max_cycles;
+    return <>
+      {isAdmin ? (
+        <input className="min-input" type="number" min="1" step="1" placeholder={unit === 'h' ? 'à définir' : '—'} aria-label={`Potentiel ${unit === 'h' ? 'heures' : 'cycles'} ${t.name}`}
+          value={edit[key] ?? (cur?.toString() ?? '')}
+          onChange={(e) => setEdit({ ...edit, [key]: e.target.value })}
+          onBlur={() => save(key)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+      ) : cur != null ? (unit === 'h' ? `${num(cur)} h` : `${num(cur, 0)} cycles`) : unit === 'h' ? <span className="text-warn">à définir</span> : '—'}
+      {saved === key && <span className="small text-ok"> ✓</span>}
+    </>;
+  };
   return (
     <>
       <ErrorBox error={error} />
       <div className="card no-pad">
         <div className="table-summary small muted">
-          Le potentiel (heures de vol maximum) s'applique à toutes les pièces du type, sauf si une pièce a son propre potentiel.
+          Le potentiel (heures de vol et/ou cycles maximum) s'applique à toutes les pièces du type, sauf si une pièce a son propre potentiel.
+          Un cycle = un décollage + un atterrissage, compté à chaque vol du drone pendant le montage (moteurs VTOL notamment) ; la pièce est en alerte dès que l'un des deux potentiels approche.
           {undef > 0 && <> <strong className="text-warn">{undef} type(s) sans potentiel.</strong></>}
           {!isAdmin && ' Seul un administrateur peut le modifier.'}
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Catégorie</th><th>Sous-catégorie</th><th className="num">Potentiel (h)</th><th className="num">Montées</th><th className="num">En stock</th><th className="num">Alerte</th></tr></thead>
+            <thead><tr><th>Code</th><th>Catégorie</th><th>Sous-catégorie</th><th className="num">Potentiel (h)</th><th className="num">Potentiel (cycles)</th><th className="num">Montées</th><th className="num">En stock</th><th className="num">Alerte</th></tr></thead>
             <tbody>
               {types.map((t) => {
                 const of = parts.filter((p) => p.type_code === t.code);
@@ -844,15 +875,8 @@ function TypesTab({ types, parts, isAdmin, onChanged }: { types: PartType[]; par
                     <td><span className="pk-code">{t.code}</span></td>
                     <td>{t.category}</td>
                     <td>{t.name}{t.multi && <span className="small muted"> · plusieurs par drone</span>}</td>
-                    <td className="num">
-                      {isAdmin ? (
-                        <input className="min-input" type="number" min="1" step="1" placeholder="à définir" aria-label={`Potentiel ${t.name}`}
-                          value={edit[t.code] ?? (t.default_max_hours?.toString() ?? '')}
-                          onChange={(e) => setEdit({ ...edit, [t.code]: e.target.value })}
-                          onBlur={() => save(t.code)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-                      ) : t.default_max_hours != null ? `${num(t.default_max_hours)} h` : <span className="text-warn">à définir</span>}
-                      {saved === t.code && <span className="small text-ok"> ✓</span>}
-                    </td>
+                    <td className="num">{potInput(t, 'h')}</td>
+                    <td className="num">{potInput(t, 'c')}</td>
                     <td className="num">{of.filter((p) => p.status === 'monte').length}</td>
                     <td className="num">{of.filter((p) => p.status === 'stock').length}</td>
                     <td className="num">{alert ? <Badge level="warn">{alert}</Badge> : '—'}</td>

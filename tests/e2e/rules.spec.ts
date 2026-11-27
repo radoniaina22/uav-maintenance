@@ -457,3 +457,23 @@ test.describe('Alertes par e-mail', () => {
     await ok(admin.from('technical_reports').update({ status: 'clos', corrective_action: 'ESC remplacé (test automatique)' }).eq('id', r.id));
   });
 });
+
+test.describe('Pièces : potentiel en cycles', () => {
+  test('un moteur VTOL compte un cycle par vol pendant son montage ; le potentiel retenu est le plus consommé', async () => {
+    const nord = await as('nord');
+    const [code] = await ok(nord.rpc('create_parts', { p_type: 'MOV', p_qty: 1, p_port: fx.ports.nord, p_notes: 'Test automatique' })) as string[];
+    const part = await ok(nord.from('parts').select('id').eq('code', code).single());
+    await ok(nord.rpc('mount_part', { p_part: part.id, p_drone: fx.drones.nord, p_slot: 'MOV-AVD', p_zone: 'vtol_avd', p_at: `${today}T00:00:00` }));
+    const flights = await ok(nord.from('flights').select('id').eq('drone_id', fx.drones.nord).eq('flight_date', today));
+    expect(flights.length).toBeGreaterThan(0);
+    // 1 cycle avant suivi + 1 par vol ; potentiel propre : autant de cycles que le total -> 100 %
+    const total = flights.length + 1;
+    await ok(nord.from('parts').update({ initial_cycles: 1, max_cycles: total, max_hours: 1000 }).eq('id', part.id));
+    const v = await ok(nord.from('v_parts').select('flight_count, total_cycles, max_cycles_effective, cycle_pct, hours_pct, potential_pct').eq('id', part.id).single());
+    expect(v.flight_count).toBe(flights.length);
+    expect(v.total_cycles).toBe(total);
+    expect(Number(v.cycle_pct)).toBe(100);
+    expect(Number(v.hours_pct)).toBeLessThan(100);
+    expect(Number(v.potential_pct)).toBe(100);
+  });
+});
