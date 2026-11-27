@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import type { WindpathRecord, WindpathRecordPoint } from '../lib/windpath';
-import UavLogo from './UavLogo';
+import UnfpaLogo from './UnfpaLogo';
 
 /**
  * Rapport de vol WindPath : annexe du CRM (même feuille A4, même PDF).
@@ -195,7 +195,7 @@ const WindpathReport = forwardRef<HTMLElement, { record: WindpathRecord; flight:
   return (
     <article ref={ref} className="crm-sheet wp-sheet">
       <header className="crm-head">
-        <UavLogo className="crm-logo" />
+        <UnfpaLogo className="crm-logo" />
         <div className="crm-head-title">
           <div className="crm-org">UNFPA Madagascar · Livraison par drones</div>
           <h1>Rapport de vol WindPath</h1>

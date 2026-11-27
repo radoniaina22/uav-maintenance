@@ -8,7 +8,7 @@ import { addDays, daysBetween, download, iso, parseIso, toCsv } from '../lib/sta
 import { TANGO4_ZONES, zoneLabel } from '../lib/parts';
 import { Badge, Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
 import { Icon, IconName } from '../components/icons';
-import UavLogo from '../components/UavLogo';
+import UnfpaLogo from '../components/UnfpaLogo';
 
 interface HistoryRow {
   at: string; category: 'piece' | 'rapport' | 'mesure' | 'visite'; event: string; title: string; detail: string | null; note: string | null;
@@ -328,7 +328,7 @@ export default function DroneHistory() {
     <div className="history-page hp-doc">
       {/* En-tête imprimé uniquement */}
       <header className="doc-head print-only">
-        <UavLogo className="doc-logo doc-logo-uav" width="56mm" />
+        <UnfpaLogo className="doc-logo" />
         <div className="doc-title">
           <div className="doc-org">UNFPA Madagascar · Livraison par drones</div>
           <h1>Historique technique</h1>

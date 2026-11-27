@@ -8,7 +8,7 @@ import { supabase, unwrap } from '../lib/supabase';
 import { useData } from '../lib/useData';
 import type { CrmSignature, CrmVisaKind, FlightPilot, FlightRow, TechnicalReport } from '../lib/types';
 import ReportModal from '../components/ReportModal';
-import UavLogo from '../components/UavLogo';
+import UnfpaLogo from '../components/UnfpaLogo';
 import { cardinal, cellText, date, km, LABELS, minutes, num, THRESHOLDS, time, volts } from '../lib/format';
 import { POTENTIAL_WARN_PCT } from '../lib/parts';
 import { ErrorBox, Loading, Modal } from '../components/ui';
@@ -239,7 +239,7 @@ export default function FlightCrm({ flightId, onReady }: { flightId?: string; on
       <div ref={docRef} className="crm-doc">
       <article ref={sheetRef} className={`crm-sheet${closed ? '' : ' is-draft'}`}>
         <header className="crm-head">
-          <UavLogo className="crm-logo" />
+          <UnfpaLogo className="crm-logo" />
           <div className="crm-head-title">
             <div className="crm-org">UNFPA Madagascar · Livraison par drones</div>
             <h1>Compte rendu matériel</h1>

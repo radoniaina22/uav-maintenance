@@ -6,7 +6,7 @@ import type { PartRow } from '../lib/types';
 import { Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
 import { partQrValue, QrCode } from '../components/QrCode';
 import { droneQrValue } from '../components/QrScanner';
-import { UavEmblem } from '../components/UavLogo';
+import UnfpaLogo from '../components/UnfpaLogo';
 
 type Size = 'xmini' | 'mini' | 'petit' | 'moyen' | 'grand';
 const SIZES: Record<Size, { label: string; qr: number }> = {
@@ -88,7 +88,7 @@ export default function PartLabels() {
                 {!codeOnly && <>
                   <span>{p.lines[0]}</span>
                   {showSn && p.lines[1] && <span>{p.lines[1]}</span>}
-                  <span className="part-label-org"><UavEmblem size="1.25em" className="part-label-emblem" /> UAV Maintenance</span>
+                  <span className="part-label-org"><UnfpaLogo className="part-label-emblem" /></span>
                 </>}
               </div>
             </div>

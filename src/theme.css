@@ -945,20 +945,16 @@ a.feed-item:hover { background: var(--surface-2); text-decoration: none; }
   .history-page .stat-label, .history-page .stat-sub { font-size: 7pt !important; }
   .history-page .history-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-.doc-head:has(.doc-logo-uav) { grid-template-columns: 56mm 1fr auto; }
-.doc-logo-uav { height: auto; }
-.doc-head .doc-logo-uav { width: 56mm !important; height: auto; }
-.doc-head:has(.doc-logo-uav) .doc-org { letter-spacing: .08em; }
-
-/* ---------- Logo UAV Maintenance dans les impressions ---------- */
-.lb-head:has(.lb-logo-uav) { grid-template-columns: 56mm 1fr auto; }
-.lb-head .lb-logo-uav { width: 56mm; height: auto; }
+/* ---------- Logo UNFPA dans les impressions (public/logo-unfpa.png, ratio 2,12) ---------- */
+.unfpa-logo { display: block; height: auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.lb-head { grid-template-columns: 30mm 1fr auto; }
+.lb-head .lb-logo { width: 30mm; }
 .crm-head { align-items: center; }
-.crm-logo { flex: none; width: 48mm; height: auto; padding-right: 10px; border-right: 1px solid var(--line); }
+.crm-logo { flex: none; width: 34mm; height: auto; padding-right: 10px; border-right: 1px solid var(--line); }
 .crm-head-title { flex: 1; min-width: 0; padding-left: 4px; }
 .part-label-org { display: inline-flex; align-items: center; gap: 1mm; }
-.part-label-emblem { width: 1.25em; height: 1.25em; border-radius: 22%; flex: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-@media (max-width: 760px) { .crm-logo { width: 42mm; border-right: none; padding-right: 0; } }
+.part-label-emblem { display: inline-block; width: auto; height: 1.6em; flex: none; }
+@media (max-width: 760px) { .crm-logo { width: 30mm; border-right: none; padding-right: 0; } }
 
 /* =================== Carnet de vol : cockpit du pilote =================== */
 .cockpit { display: flex; flex-direction: column; gap: 16px; }

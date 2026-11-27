@@ -6,7 +6,7 @@ import { useData } from '../lib/useData';
 import type { LogbookRow, PilotStatsRow } from '../lib/types';
 import { date, hours, minutes, num, time } from '../lib/format';
 import { Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
-import UavLogo from '../components/UavLogo';
+import UnfpaLogo from '../components/UnfpaLogo';
 import PilotCockpit from '../components/PilotCockpit';
 
 export default function Logbook() {
@@ -88,7 +88,7 @@ function LogbookPrint({ pilot: p, entries, year }: { pilot: PilotStatsRow; entri
   return (
     <article className="logbook-print" aria-hidden>
       <header className="lb-head">
-        <UavLogo className="lb-logo lb-logo-uav" />
+        <UnfpaLogo className="lb-logo" />
         <div className="lb-title">
           <div className="lb-org">UNFPA Madagascar · Livraison par drones</div>
           <h1>Carnet de vol pilote</h1>

@@ -9,7 +9,7 @@ import { dateTime, PART_EVENT } from '../lib/parts';
 import { WO_KIND, WO_PRIORITY, WO_STATUS, WO_STEPS } from '../lib/workOrders';
 import { Badge, ErrorBox, Loading, Modal, PageHeader } from '../components/ui';
 import { Icon } from '../components/icons';
-import UavLogo from '../components/UavLogo';
+import UnfpaLogo from '../components/UnfpaLogo';
 
 type Item = { kind: WorkOrderLink['kind']; id: string; at: string; title: string; sub: string; level?: 'ok' | 'warn' | 'danger' | 'neutral' };
 
@@ -99,7 +99,7 @@ export default function WorkOrderDetail() {
     <div className="history-page hp-doc wo-detail">
       {/* ===== document imprimé ===== */}
       <header className="doc-head print-only">
-        <UavLogo className="doc-logo doc-logo-uav" width="56mm" />
+        <UnfpaLogo className="doc-logo" />
         <div className="doc-title">
           <div className="doc-org">UNFPA Madagascar · Livraison par drones</div>
           <h1>Ordre de travail</h1>
