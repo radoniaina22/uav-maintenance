@@ -202,6 +202,7 @@ a.card:hover { text-decoration: none; border-color: var(--primary); }
   box-shadow: 0 6px 18px rgba(10, 20, 35, 0.14); font-size: 12.5px;
 }
 .viz-tip-title { font-weight: 600; margin-bottom: 4px; }
+.viz-tip-hint { margin-top: 4px; font-size: 11px; opacity: .7; }
 .viz-tip-row { display: flex; align-items: center; gap: 6px; line-height: 1.6; }
 .viz-tip-row strong { font-variant-numeric: tabular-nums; }
 .viz-tip-label { color: var(--muted); }

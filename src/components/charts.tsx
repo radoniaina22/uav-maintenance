@@ -216,12 +216,15 @@ export function linearFit(pts: { x: number; y: number }[]) {
   return { slope, intercept: my - slope * mx, r: sxy / Math.sqrt(sxx * syy) };
 }
 
-export function ScatterChart<T>({ data, x, y, color, tooltip, xLabel, yLabel, height = 260, trend = true }: {
+export function ScatterChart<T>({ data, x, y, color, tooltip, xLabel, yLabel, height = 260, trend = true, onSelect, selectHint }: {
   data: T[]; x: (d: T) => number; y: (d: T) => number; color: (d: T) => string;
   tooltip: (d: T) => ReactNode; xLabel: string; yLabel: string; height?: number; trend?: boolean;
+  /** clic sur un point (au doigt : 1er appui = info-bulle, 2e appui sur le même point = sélection) */
+  onSelect?: (d: T) => void; selectHint?: string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const touched = useRef<number | null>(null);
   const M = { top: 14, right: 14, bottom: 40, left: 48 };
   const iw = width - M.left - M.right, ih = height - M.top - M.bottom;
   const xs = data.map(x), ys = data.map(y);
@@ -236,12 +239,22 @@ export function ScatterChart<T>({ data, x, y, color, tooltip, xLabel, yLabel, he
   const xTicks = Array.from({ length: xTickCount + 1 }, (_, i) => xMin + ((xMax - xMin) * i) / xTickCount);
   const fit = trend ? linearFit(data.map((d) => ({ x: x(d), y: y(d) }))) : null;
 
-  const onMove = (e: React.PointerEvent<SVGRectElement>) => {
+  const HIT = 10; // zone de capture élargie : les points posés sur un bord restent atteignables
+  const nearest = (e: React.PointerEvent<SVGRectElement>) => {
     const r = (e.currentTarget as SVGRectElement).getBoundingClientRect();
-    const px = e.clientX - r.left + M.left, py = e.clientY - r.top + M.top;
+    const px = e.clientX - r.left + M.left - HIT, py = e.clientY - r.top + M.top - HIT;
     let best = -1, bd = 24 ** 2;
     data.forEach((d, i) => { const dd = (sx(x(d)) - px) ** 2 + (sy(y(d)) - py) ** 2; if (dd < bd) { bd = dd; best = i; } });
-    setHover(best >= 0 ? best : null);
+    return best >= 0 ? best : null;
+  };
+  const onMove = (e: React.PointerEvent<SVGRectElement>) => setHover(nearest(e));
+  const onUp = (e: React.PointerEvent<SVGRectElement>) => {
+    if (!onSelect) return;
+    const i = nearest(e);
+    if (i == null) { touched.current = null; return; }
+    if (e.pointerType !== 'mouse' && touched.current !== i) { touched.current = i; setHover(i); return; }
+    touched.current = null;
+    onSelect(data[i]);
   };
 
   return (
@@ -265,9 +278,13 @@ export function ScatterChart<T>({ data, x, y, color, tooltip, xLabel, yLabel, he
         {data.map((d, i) => (
           <circle key={i} cx={sx(x(d))} cy={sy(y(d))} r={hover === i ? 6 : 4.5} fill={color(d)} className="viz-point" opacity={hover == null || hover === i ? 0.9 : 0.45} />
         ))}
-        <rect x={M.left} y={M.top} width={iw} height={ih} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} />
+        <rect x={M.left - HIT} y={M.top - HIT} width={iw + 2 * HIT} height={ih + 2 * HIT} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerUp={onUp}
+          style={onSelect && hover != null ? { cursor: 'pointer' } : undefined} />
       </svg>
-      {hover != null && <Tooltip x={sx(x(data[hover]))} containerWidth={width}>{tooltip(data[hover])}</Tooltip>}
+      {hover != null && <Tooltip x={sx(x(data[hover]))} containerWidth={width}>
+        {tooltip(data[hover])}
+        {onSelect && selectHint && <div className="viz-tip-hint">{selectHint}</div>}
+      </Tooltip>}
     </div>
   );
 }

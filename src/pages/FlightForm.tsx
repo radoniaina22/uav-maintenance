@@ -641,7 +641,7 @@ export default function FlightForm() {
           <Field label="Distance de vol (km)" hint={selectedCsb?.distance_km != null
             ? `Distance enregistrée pour ce CSB : ${km(selectedCsb.distance_km)}`
             : selectedCsb ? "Aucune distance enregistrée pour ce CSB" : undefined}>
-            <input type="number" step="0.1" min="0" inputMode="decimal" value={form.distance_km} onChange={(e) => set('distance_km', e.target.value)} />
+            <input type="number" step="0.01" min="0" inputMode="decimal" value={form.distance_km} onChange={(e) => set('distance_km', e.target.value)} />
           </Field>
           <Field label="Pilote" required>
             <select required value={form.pilot_1_id} onChange={(e) => set('pilot_1_id', e.target.value)}>

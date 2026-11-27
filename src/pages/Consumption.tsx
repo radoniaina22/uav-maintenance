@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase, unwrap } from '../lib/supabase';
 import { useApp } from '../lib/app';
 import { useData } from '../lib/useData';
@@ -98,6 +98,7 @@ function CellBattery({ v }: { v: number | null }) {
 export default function Consumption() {
   const { isAdmin, ports, portFilter, setPortFilter, myPort } = useApp();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const csb = params.get('csb') ?? '';
   const drone = params.get('drone') ?? '';
   const setParam = (k: string, v: string) => { const p = new URLSearchParams(params); if (v) p.set(k, v); else p.delete(k); setParams(p, { replace: true }); };
@@ -366,7 +367,7 @@ export default function Consumption() {
 
             <div className="viz-grid-layout">
               <ChartCard wide title="Facteurs d'influence" subtitle={<>
-                Chaque point est un vol · {scatter.length} vol(s) avec {FACTORS[factor].label.replace(/ \(.*\)/, '').toLowerCase()} renseigné(e)
+                Chaque point est un vol (cliquez dessus pour ouvrir sa fiche) · {scatter.length} vol(s) avec {FACTORS[factor].label.replace(/ \(.*\)/, '').toLowerCase()} renseigné(e)
                 {fit ? <> · tendance en pointillé (r = {fmt(fit.r, 2)}, {strength(fit.r)})</> : null}</>}
                 legend={<div className="row-between viz-controls">
                   <Legend items={[{ key: 'l', label: 'Livraison', color: C1 }, { key: 'q', label: 'QRF', color: C2 }, { key: 'c', label: 'Vol de contrôle', color: C3 }]} />
@@ -382,6 +383,7 @@ export default function Consumption() {
                 {scatter.length ? (
                   <ScatterChart data={scatter} x={(f) => FACTORS[factor].get(f)!} y={(f) => METRICS[metric].get(f)!} color={catColor}
                     xLabel={FACTORS[factor].label} yLabel={METRICS[metric].label}
+                    onSelect={(f) => navigate(`/vols/${f.id}`)} selectHint="Cliquer pour ouvrir la fiche du vol"
                     tooltip={(f) => <>
                       <div className="viz-tip-title">{fmtDate(f.flight_date)} · {f.drone_code}</div>
                       <div className="muted small">{f.destination_name ?? catLabel(f)}</div>
